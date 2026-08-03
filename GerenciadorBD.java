@@ -27,6 +27,20 @@ public class GerenciadorBD {
         } catch (SQLException e) {
             System.err.println("Erro ao inicializar banco: " + e.getMessage());
         }
+
+        String sqlItens = "CREATE TABLE IF NOT EXISTS inventarios (" +
+                          "id INTEGER PRIMARY KEY AUTOINCREMENT," +
+                          "jogador_nome TEXT NOT NULL," +
+                          "item_nome TEXT NOT NULL," +
+                          "FOREIGN KEY(jogador_nome) REFERENCES personagens(nome) ON DELETE CASCADE" +
+                          ");";
+
+            try (Connection conn = DriverManager.getConnection(URL);
+                Statement stmt = conn.createStatement()) {
+                stmt.execute(sqlItens);
+            } catch (SQLException e) {
+                System.err.println("Erro ao criar tabela de inventário: " + e.getMessage());
+            }
     }
 
     // Método para verificar se o jogador existe
@@ -112,6 +126,52 @@ public class GerenciadorBD {
             this.vidaAtual = vidaAtual;
             this.vidaMax = vidaMax;
             this.salaId = salaId;
+        }
+    }
+
+    // Método para carregar os itens salvos do jogador
+    public static java.util.List<String> carregarInventario(String nomeJogador) {
+        java.util.List<String> itens = new java.util.ArrayList<>();
+        String sql = "SELECT item_nome FROM inventarios WHERE jogador_nome = ?";
+        
+        try (Connection conn = DriverManager.getConnection(URL);
+            PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, nomeJogador);
+            ResultSet rs = pstmt.executeQuery();
+            while (rs.next()) {
+                itens.add(rs.getString("item_nome"));
+            }
+        } catch (SQLException e) {
+            System.err.println("Erro ao carregar itens: " + e.getMessage());
+        }
+        return itens;
+    }
+
+    // Método para salvar o inventário completo (Limpa o antigo e insere o atual)
+    public static void salvarInventario(String nomeJogador, java.util.List<Item> inventario) {
+        String sqlDeletar = "DELETE FROM inventarios WHERE jogador_nome = ?";
+        String sqlInserir = "INSERT INTO inventarios(jogador_nome, item_nome) VALUES(?, ?)";
+
+        try (Connection conn = DriverManager.getConnection(URL)) {
+            conn.setAutoCommit(false); // Transação para garantir segurança
+
+            try (PreparedStatement pstmtDel = conn.prepareStatement(sqlDeletar)) {
+                pstmtDel.setString(1, nomeJogador);
+                pstmtDel.executeUpdate();
+            }
+
+            try (PreparedStatement pstmtIns = conn.prepareStatement(sqlInserir)) {
+                for (Item item : inventario) {
+                    pstmtIns.setString(1, nomeJogador);
+                    pstmtIns.setString(2, item.getNome());
+                    pstmtIns.addBatch();
+                }
+                pstmtIns.executeBatch();
+            }
+
+            conn.commit();
+        } catch (SQLException e) {
+            System.err.println("Erro ao salvar inventário: " + e.getMessage());
         }
     }
 }

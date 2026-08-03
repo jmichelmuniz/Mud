@@ -4,9 +4,11 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -56,6 +58,14 @@ public class ServidorMUD {
         mapa.put(templo.getId(), templo);
         mapa.put(praca.getId(), praca);
         mapa.put(floresta.getId(), floresta);
+
+        // Itens criados
+        Item espada = new Item("espada", "Uma espada simples.", "arma");
+        Item pocao = new Item("pocao", "Um pequeno frasco com um liquido vermelho", "pocao");
+
+        // Adicionando itens iniciais na sala
+        templo.adicionarItem(pocao);
+        floresta.adicionarItem(espada);
     }
 
     // Classe que representa uma Sala do jogo
@@ -65,6 +75,7 @@ public class ServidorMUD {
         private final String descricao;
         private final Map<String, Sala> saidas = new HashMap<>();
         private final Set<ClientHandler> jogadoresNaSala = Collections.synchronizedSet(new HashSet<>());
+        private final List<Item> itensNaSala = Collections.synchronizedList(new ArrayList<>());
 
         public Sala(int id, String nome, String descricao) {
             this.id = id;
@@ -91,6 +102,33 @@ public class ServidorMUD {
             jogadoresNaSala.remove(jogador);
         }
 
+        public void adicionarItem(Item item) {
+            itensNaSala.add(item);
+        }
+
+        public Item removerItem(String nomeItem) {
+            synchronized (itensNaSala) {
+                for (Item item : itensNaSala) {
+                    if (item.getNome().equalsIgnoreCase(nomeItem)) {
+                        itensNaSala.remove(item);
+                        return item; // Remove e retorna o primeiro item correspondente encontrado
+                    }
+                }
+            }
+            return null;
+        }
+
+        public Item buscarItem(String nomeItem) {
+            synchronized (itensNaSala) {
+                for (Item item : itensNaSala) {
+                    if (item.getNome().equalsIgnoreCase(nomeItem)) {
+                        return item;
+                    }
+                }
+            }
+            return null;
+        }
+
         // Envia mensagem apenas para quem está nesta sala
         public void transmitirParaSala(String mensagem, ClientHandler remetente) {
             synchronized (jogadoresNaSala) {
@@ -103,16 +141,56 @@ public class ServidorMUD {
         }
 
         // Retorna o texto descritivo da sala e suas saídas visíveis
-        public String obterDescricaoCompleta() {
+        public String obterDescricaoCompleta(ClientHandler leitor) {
             StringBuilder sb = new StringBuilder();
             sb.append("\n=== ").append(nome).append(" ===\n");
             sb.append(descricao).append("\n");
+
+            // --- LISTA DE JOGADORES ---
+            List<String> outrosJogadores = new java.util.ArrayList<>();
+            synchronized (jogadoresNaSala) {
+                for (ClientHandler jogador : jogadoresNaSala) {
+                    if (jogador != leitor && jogador.nomeJogador != null) {
+                        outrosJogadores.add(jogador.nomeJogador);
+                    }
+                }
+            }
+
+            if (!outrosJogadores.isEmpty()) {
+                sb.append("Jogadores presentes: ").append(String.join(", ", outrosJogadores)).append("\n");
+            }
+
+            // Lista de itens
+            if (!itensNaSala.isEmpty()) {
+                // Agrupa e conta a quantidade de itens por nome
+                Map<String, Long> contagemItens;
+                synchronized (itensNaSala) {
+                    contagemItens = itensNaSala.stream()
+                        .collect(java.util.stream.Collectors.groupingBy(
+                            Item::getNome, 
+                            java.util.stream.Collectors.counting()
+                        ));
+                }
+
+                List<String> exibicaoItens = new java.util.ArrayList<>();
+                for (Map.Entry<String, Long> entry : contagemItens.entrySet()) {
+                    if (entry.getValue() > 1) {
+                        exibicaoItens.add(entry.getKey() + " (x" + entry.getValue() + ")");
+                    } else {
+                        exibicaoItens.add(entry.getKey());
+                    }
+                }
+
+                sb.append("No chão você vê: ").append(String.join(", ", exibicaoItens)).append("\n");
+            }
+
             sb.append("[Saídas visíveis: ");
             if (saidas.isEmpty()) {
                 sb.append("nenhuma");
             } else {
                 sb.append(String.join(", ", saidas.keySet()));
             }
+
             sb.append("]");
             return sb.toString();
         }
@@ -121,6 +199,7 @@ public class ServidorMUD {
     // Gerenciador de cada jogador conectado
     private static class ClientHandler implements Runnable {
         private final Socket socket;
+        private final java.util.List<Item> inventario = Collections.synchronizedList(new java.util.ArrayList<>());
         private PrintWriter escritor;
         private BufferedReader leitor;
         private String nomeJogador;
@@ -140,7 +219,7 @@ public class ServidorMUD {
                 escritor = new PrintWriter(socket.getOutputStream(), true);
 
                 escritor.println("==========================================");
-                escritor.println("          MUD EM JAVA: MUNDO EXPANDIDO     ");
+                escritor.println("                 MUD v0.0.2               ");
                 escritor.println("==========================================");
                 escritor.print("Digite o seu nome: ");
                 escritor.flush();
@@ -180,6 +259,14 @@ public class ServidorMUD {
                     escritor.println("\nConta criada com sucesso! Aproveite o jogo, " + nomeJogador + ".");
                 }
 
+                // Carrega os nomes dos itens do banco e reconstrói os objetos Item
+                java.util.List<String> nomesItensSalvos = GerenciadorBD.carregarInventario(nomeJogador);
+                for (String nomeItem : nomesItensSalvos) {
+                    // Um mini-banco de dados estático de itens para reconstruir o objeto (exemplo simples)
+                    if (nomeItem.equals("espada")) inventario.add(new Item("espada", "Uma espada de ferro.", "arma"));
+                    if (nomeItem.equals("pocao")) inventario.add(new Item("pocao", "Uma poção de vida.", "pocao"));
+                }
+
                 // Posiciona na sala recuperada do banco (se a sala existir no mapa)
                 Sala salaSalva = mapa.get(dadosPersonagem.salaId);
                 if (salaSalva != null) {
@@ -192,7 +279,7 @@ public class ServidorMUD {
                 escritor.println("Atributos: Vida [" + dadosPersonagem.vidaAtual + "/" + dadosPersonagem.vidaMax + "]");
 
                 salaAtual.transmitirParaSala("[" + nomeJogador + " materializou-se na sala.]", this);
-                escritor.println(salaAtual.obterDescricaoCompleta());
+                escritor.println(salaAtual.obterDescricaoCompleta(this));
                 exibirPrompt();
 
                 String linhaComando;
@@ -210,6 +297,7 @@ public class ServidorMUD {
             } finally {
                 if (dadosPersonagem != null) {
                     GerenciadorBD.salvarPersonagem(dadosPersonagem); // Salva vida e localização final
+                    GerenciadorBD.salvarInventario(nomeJogador, inventario); // Salva os itens
                 }
                 salaAtual.transmitirParaSala("[" + nomeJogador + " desconectou.]", this);
                 salaAtual.removerJogador(this);
@@ -224,21 +312,99 @@ public class ServidorMUD {
 
             // Comando OLHAR
             if (comandoLower.equals("olhar")) {
-                escritor.println(salaAtual.obterDescricaoCompleta());
+                escritor.println(salaAtual.obterDescricaoCompleta(this));
             } 
+
             // Comandos de MOVIMENTAÇÃO (norte, sul, leste, oeste)
             else if (comandoLower.equals("norte") || comandoLower.equals("sul") || 
                      comandoLower.equals("leste") || comandoLower.equals("oeste")) {
                 mover(comandoLower);
             } 
+
             // Comando FALAR (chat local da sala)
             else if (comandoLower.startsWith("falar ")) {
                 String fala = comando.substring(6);
                 escritor.println("Você diz: " + fala);
                 salaAtual.transmitirParaSala(nomeJogador + " diz: " + fala, this);
             } 
+            
+
+            // Comando INVENTARIO
+            else if (comandoLower.equals("inventario") || comandoLower.equals("i")) {
+                if (inventario.isEmpty()) {
+                    escritor.println("Seu inventário está vazio.");
+                } else {
+                    escritor.println("Seu inventário contém:");
+                    for (Item item : inventario) {
+                        escritor.println("- " + item.getNome() + " (" + item.getTipo() + ")");
+                    }
+                }
+            }
+
+            // Comando PEGAR
+            else if (comandoLower.startsWith("pegar ")) {
+                String nomeItem = comandoLower.substring(6).trim();
+                Item itemNoChao = salaAtual.removerItem(nomeItem);
+                
+                if (itemNoChao != null) {
+                    inventario.add(itemNoChao);
+                    escritor.println("Você pegou: " + itemNoChao.getNome());
+                    salaAtual.transmitirParaSala("[" + nomeJogador + " pegou " + itemNoChao.getNome() + " do chão.]", this);
+                    GerenciadorBD.salvarInventario(nomeJogador, inventario); // Salva preventivamente
+                } else {
+                    escritor.println("Não há nenhum '" + nomeItem + "' aqui no chão.");
+                }
+            }
+
+            // Comando LARGAR
+            else if (comandoLower.startsWith("largar ")) {
+                String nomeItem = comandoLower.substring(7).trim();
+                Item itemNoInventario = null;
+                
+                synchronized (inventario) {
+                    for (Item item : inventario) {
+                        if (item.getNome().equals(nomeItem)) {
+                            itemNoInventario = item;
+                            break;
+                        }
+                    }
+                }
+
+                if (itemNoInventario != null) {
+                    inventario.remove(itemNoInventario);
+                    salaAtual.adicionarItem(itemNoInventario);
+                    escritor.println("Você largou: " + itemNoInventario.getNome());
+                    salaAtual.transmitirParaSala("[" + nomeJogador + " largou " + itemNoInventario.getNome() + " no chão.]", this);
+                    GerenciadorBD.salvarInventario(nomeJogador, inventario); // Salva preventivamente
+                } else {
+                    escritor.println("Você não possui um '" + nomeItem + "' no seu inventário.");
+                }
+            }
+
+            // Comando EXAMINAR
+            else if (comandoLower.startsWith("examinar ")) {
+                String nomeItem = comandoLower.substring(9).trim();
+                Item procurado = null;
+
+                // Procura primeiro no inventário
+                for (Item item : inventario) {
+                    if (item.getNome().equals(nomeItem)) { procurado = item; break; }
+                }
+                // Se não achar, procura no chão da sala
+                if (procurado == null) {
+                    procurado = salaAtual.buscarItem(nomeItem);
+                }
+
+                if (procurado != null) {
+                    escritor.println(procurado.getNome().toUpperCase() + ": " + procurado.getDescricao());
+                } else {
+                    escritor.println("Você não vê nenhum '" + nomeItem + "' aqui ou no seu inventário.");
+                }
+            }
+
+            // Final
             else {
-                escritor.println("Comando inválido. Use as direções, 'olhar' ou 'falar <texto>'.");
+                escritor.println("Comando inválido. Use as direções, 'olhar', 'inventario' ou 'falar <texto>'.");
             }
             exibirPrompt();
         }
@@ -266,7 +432,7 @@ public class ServidorMUD {
             
             // Mostra a descrição da nova sala para o jogador
             escritor.println("Você se moveu para o " + direcao.toUpperCase() + ".");
-            escritor.println(salaAtual.obterDescricaoCompleta());
+            escritor.println(salaAtual.obterDescricaoCompleta(this));
         }
 
         public void enviarMensagem(String mensagem) {
