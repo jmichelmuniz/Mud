@@ -59,6 +59,14 @@ public class ServidorMUD {
         mapa.put(praca.getId(), praca);
         mapa.put(floresta.getId(), floresta);
 
+        // Criando monstros
+        Monstro goblin = new Monstro("Goblin", 15, 3, 10);
+        Monstro lobo = new Monstro("Lobo", 25, 5, 20);
+
+        // Adicionando na Floresta
+        floresta.adicionarMonstro(goblin);
+        floresta.adicionarMonstro(lobo);
+
         // Itens criados
         Item espada = new Item("espada", "Uma espada simples.", "arma");
         Item pocao = new Item("pocao", "Um pequeno frasco com um liquido vermelho", "pocao");
@@ -75,6 +83,7 @@ public class ServidorMUD {
         private final String descricao;
         private final Map<String, Sala> saidas = new HashMap<>();
         private final Set<ClientHandler> jogadoresNaSala = Collections.synchronizedSet(new HashSet<>());
+        private final List<Monstro> monstrosNaSala = Collections.synchronizedList(new ArrayList<>());
         private final List<Item> itensNaSala = Collections.synchronizedList(new ArrayList<>());
 
         public Sala(int id, String nome, String descricao) {
@@ -127,6 +136,25 @@ public class ServidorMUD {
                 }
             }
             return null;
+        }
+
+        public void adicionarMonstro(Monstro monstro) {
+            monstrosNaSala.add(monstro);
+        }
+
+        public Monstro buscarMonstro(String nome) {
+            synchronized (monstrosNaSala) {
+                for (Monstro m : monstrosNaSala) {
+                    if (m.getNome().equalsIgnoreCase(nome) && m.estaVivo()) {
+                        return m;
+                    }
+                }
+            }
+            return null;
+        }
+
+        public void removerMonstro(Monstro monstro) {
+            monstrosNaSala.remove(monstro);
         }
 
         // Envia mensagem apenas para quem está nesta sala
@@ -184,6 +212,22 @@ public class ServidorMUD {
                 sb.append("No chão você vê: ").append(String.join(", ", exibicaoItens)).append("\n");
             }
 
+            // Lista de Monstros
+            if (!monstrosNaSala.isEmpty()) {
+                List<String> nomesMonstros = new ArrayList<>();
+                synchronized (monstrosNaSala) {
+                    for (Monstro m : monstrosNaSala) {
+                        if (m.estaVivo()) {
+                            nomesMonstros.add(m.getNome() + " [HP: " + m.getVidaAtual() + "/" + m.getVidaMax() + "]");
+                        }
+                    }
+                }
+                if (!nomesMonstros.isEmpty()) {
+                    sb.append("Inimigos aqui: ").append(String.join(", ", nomesMonstros)).append("\n");
+                }
+            }
+
+            // Saídas
             sb.append("[Saídas visíveis: ");
             if (saidas.isEmpty()) {
                 sb.append("nenhuma");
@@ -219,7 +263,7 @@ public class ServidorMUD {
                 escritor = new PrintWriter(socket.getOutputStream(), true);
 
                 escritor.println("==========================================");
-                escritor.println("                 MUD v0.0.2               ");
+                escritor.println("                 MUD v0.0.3               ");
                 escritor.println("==========================================");
                 escritor.print("Digite o seu nome: ");
                 escritor.flush();
@@ -399,6 +443,70 @@ public class ServidorMUD {
                     escritor.println(procurado.getNome().toUpperCase() + ": " + procurado.getDescricao());
                 } else {
                     escritor.println("Você não vê nenhum '" + nomeItem + "' aqui ou no seu inventário.");
+                }
+            }
+
+            // Comando ATACAR
+            else if (comandoLower.startsWith("atacar ")) {
+                String nomeInimigo = comandoLower.substring(7).trim();
+                Monstro alvo = salaAtual.buscarMonstro(nomeInimigo);
+
+                if (alvo == null) {
+                    escritor.println("Não há nenhum inimigo chamado '" + nomeInimigo + "' aqui!");
+                    return;
+                }
+
+                // 1. Cálculo de dano do jogador (Ataque base 5 + bônus de arma se tiver equipada)
+                int danoJogador = 5;
+                for (Item item : inventario) {
+                    if (item.getTipo().equalsIgnoreCase("arma")) {
+                        danoJogador += 5; // Bônus por ter uma arma no inventário
+                        break;
+                    }
+                }
+
+                // Aplica o dano no monstro
+                alvo.receberDano(danoJogador);
+                escritor.println("Você ataca o " + alvo.getNome() + " causando " + danoJogador + " de dano!");
+                salaAtual.transmitirParaSala("[" + nomeJogador + " atacou " + alvo.getNome() + "!]", this);
+
+                // 2. Verifica se o monstro morreu
+                if (!alvo.estaVivo()) {
+                    escritor.println("Você derrotou o " + alvo.getNome() + "!");
+                    salaAtual.transmitirParaSala("[" + alvo.getNome() + " caiu derrotado por " + nomeJogador + "!]", this);
+                    salaAtual.removerMonstro(alvo);
+                    
+                    // Exemplo: Monstro dropa uma moeda ou item ao morrer
+                    salaAtual.adicionarItem(new Item("pocao", "Uma poção deixada pelo monstro", "pocao"));
+                    escritor.println("O monstro deixou cair uma pocao!");
+                    return;
+                }
+
+                // 3. Contra-ataque do monstro
+                int danoMonstro = alvo.getAtaque();
+                dadosPersonagem.vidaAtual -= danoMonstro;
+                escritor.println("O " + alvo.getNome() + " contra-ataca causando " + danoMonstro + " de dano em você!");
+
+                // 4. Verifica se o jogador morreu
+                if (dadosPersonagem.vidaAtual <= 0) {
+                    escritor.println("\n*** VOÇÊ MORREU! ***");
+                    escritor.println("Ressuscitando no Templo...");
+                    
+                    // Reseta a vida e envia de volta para o Templo (Sala ID 1)
+                    dadosPersonagem.vidaAtual = dadosPersonagem.vidaMax;
+                    
+                    salaAtual.transmitirParaSala("[" + nomeJogador + " foi derrotado por " + alvo.getNome() + "!]", this);
+                    salaAtual.removerJogador(this);
+                    
+                    salaAtual = mapa.get(1); // Templo
+                    dadosPersonagem.salaId = 1;
+                    salaAtual.adicionarJogador(this);
+                    
+                    GerenciadorBD.salvarPersonagem(dadosPersonagem);
+                    escritor.println(salaAtual.obterDescricaoCompleta(this));
+                } else {
+                    escritor.println("Vida atual de " + alvo.getNome() + ": [" + alvo.getVidaAtual() + "/" + alvo.getVidaMax() + "]");
+                    escritor.println("Sua vida atual: [" + dadosPersonagem.vidaAtual + "/" + dadosPersonagem.vidaMax + "]");
                 }
             }
 
