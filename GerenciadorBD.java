@@ -17,7 +17,9 @@ public class GerenciadorBD {
                      "senha TEXT NOT NULL," +
                      "vida_atual INTEGER DEFAULT 100," +
                      "vida_max INTEGER DEFAULT 100," +
-                     "sala_id INTEGER DEFAULT 1" +
+                     "sala_id INTEGER DEFAULT 1," +
+                     "arma_equipada TEXT," +
+                     "armadura_equipada TEXT" +
                      ");";
 
         try (Connection conn = DriverManager.getConnection(URL);
@@ -57,7 +59,7 @@ public class GerenciadorBD {
 
     // Método para validar o login (retorna os dados se a senha estiver certa)
     public static PersonagemDados autenticarJogador(String nome, String senhaDigitada) {
-        String sql = "SELECT senha, vida_atual, vida_max, sala_id FROM personagens WHERE nome = ?";
+        String sql = "SELECT senha, vida_atual, vida_max, sala_id, arma_equipada, armadura_equipada FROM personagens WHERE nome = ?";
         try (Connection conn = DriverManager.getConnection(URL);
             PreparedStatement pstmt = conn.prepareStatement(sql)) {
             
@@ -68,7 +70,7 @@ public class GerenciadorBD {
                 String hashBanco = rs.getString("senha");
                 // Usa nossa classe de segurança para validar
                 if (Seguranca.verificarSenha(senhaDigitada, hashBanco)) {
-                    return new PersonagemDados(nome, rs.getInt("vida_atual"), rs.getInt("vida_max"), rs.getInt("sala_id"));
+                    return new PersonagemDados(nome, rs.getInt("vida_atual"), rs.getInt("vida_max"), rs.getInt("sala_id"), rs.getString("arma_equipada"), rs.getString("armadura_equipada"));
                 }
             }
         } catch (SQLException e) {
@@ -89,7 +91,7 @@ public class GerenciadorBD {
             pstmt.setString(2, senhaCriptografada);
             pstmt.executeUpdate();
             
-            return new PersonagemDados(nome, 100, 100, 1);
+            return new PersonagemDados(nome, 100, 100, 1, null, null);
         } catch (SQLException e) {
             System.err.println("Erro ao cadastrar: " + e.getMessage());
             return null;
@@ -98,7 +100,7 @@ public class GerenciadorBD {
 
     // Salva o progresso atual do personagem
     public static void salvarPersonagem(PersonagemDados p) {
-        String sql = "UPDATE personagens SET vida_atual = ?, vida_max = ?, sala_id = ? WHERE nome = ?";
+        String sql = "UPDATE personagens SET vida_atual = ?, vida_max = ?, sala_id = ?, arma_equipada = ?, armadura_equipada = ? WHERE nome = ?";
 
         try (Connection conn = DriverManager.getConnection(URL);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
@@ -106,7 +108,9 @@ public class GerenciadorBD {
             pstmt.setInt(1, p.vidaAtual);
             pstmt.setInt(2, p.vidaMax);
             pstmt.setInt(3, p.salaId);
-            pstmt.setString(4, p.nome);
+            pstmt.setString(4, p.armaEquipada);
+            pstmt.setString(5, p.armaduraEquipada);
+            pstmt.setString(6, p.nome);
             pstmt.executeUpdate();
             
         } catch (SQLException e) {
@@ -120,12 +124,16 @@ public class GerenciadorBD {
         public int vidaAtual;
         public int vidaMax;
         public int salaId;
+        public String armaEquipada;
+        public String armaduraEquipada;
 
-        public PersonagemDados(String nome, int vidaAtual, int vidaMax, int salaId) {
+        public PersonagemDados(String nome, int vidaAtual, int vidaMax, int salaId, String armaEquipada, String armaduraEquipada) {
             this.nome = nome;
             this.vidaAtual = vidaAtual;
             this.vidaMax = vidaMax;
             this.salaId = salaId;
+            this.armaEquipada = armaEquipada;
+            this.armaduraEquipada = armaduraEquipada;
         }
     }
 
