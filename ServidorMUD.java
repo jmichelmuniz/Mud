@@ -68,12 +68,14 @@ public class ServidorMUD {
         floresta.adicionarMonstro(lobo);
 
         // Itens criados
-        Item espada = new Item("espada", "Uma espada simples.", "arma");
-        Item pocao = new Item("pocao", "Um pequeno frasco com um liquido vermelho", "pocao");
+        Item espada = new Item("espada", "Uma espada simples.", "arma", 5, 0);
+        Item pocao = new Item("pocao", "Um pequeno frasco com um liquido vermelho", "pocao", 0, 0);
+        Item armadura = new Item("armadura", "Uma armadura leve que protege um pouco o corpo", "armadura", 0, 3);
 
         // Adicionando itens iniciais na sala
         templo.adicionarItem(pocao);
         floresta.adicionarItem(espada);
+        templo.adicionarItem(armadura);
     }
 
     // Classe que representa uma Sala do jogo
@@ -248,6 +250,8 @@ public class ServidorMUD {
         private BufferedReader leitor;
         private String nomeJogador;
         private Sala salaAtual;
+        private Item armaEquipada = null;
+        private Item armaduraEquipada = null;
 
         public ClientHandler(Socket socket, Sala salaInicial) {
             this.socket = socket;
@@ -263,7 +267,7 @@ public class ServidorMUD {
                 escritor = new PrintWriter(socket.getOutputStream(), true);
 
                 escritor.println("==========================================");
-                escritor.println("                 MUD v0.0.6               ");
+                escritor.println("                 MUD v0.0.7               ");
                 escritor.println("==========================================");
                 escritor.print("Digite o seu nome: ");
                 escritor.flush();
@@ -303,12 +307,26 @@ public class ServidorMUD {
                     escritor.println("\nConta criada com sucesso! Aproveite o jogo, " + nomeJogador + ".");
                 }
 
+                // Carrega os itens equipados
+                if (dadosPersonagem != null) {
+                    // RESTAURAR ARMA EQUIPADA
+                    if (dadosPersonagem.armaEquipada != null) {
+                        // Recria o objeto Item correspondente ao nome salvo
+                        this.armaEquipada = criarItemPorNome(dadosPersonagem.armaEquipada);
+                    }
+
+                    // RESTAURAR ARMADURA EQUIPADA
+                    if (dadosPersonagem.armaduraEquipada != null) {
+                        this.armaduraEquipada = criarItemPorNome(dadosPersonagem.armaduraEquipada);
+                    }
+                }
+
                 // Carrega os nomes dos itens do banco e reconstrói os objetos Item
                 java.util.List<String> nomesItensSalvos = GerenciadorBD.carregarInventario(nomeJogador);
                 for (String nomeItem : nomesItensSalvos) {
                     // Um mini-banco de dados estático de itens para reconstruir o objeto (exemplo simples)
-                    if (nomeItem.equals("espada")) inventario.add(new Item("espada", "Uma espada de ferro.", "arma"));
-                    if (nomeItem.equals("pocao")) inventario.add(new Item("pocao", "Uma poção de vida.", "pocao"));
+                    if (nomeItem.equals("espada")) inventario.add(new Item("espada", "Uma espada de ferro.", "arma", 5, 0));
+                    if (nomeItem.equals("pocao")) inventario.add(new Item("pocao", "Uma poção de vida.", "pocao", 0, 0));
                 }
 
                 // Posiciona na sala recuperada do banco (se a sala existir no mapa)
@@ -340,8 +358,7 @@ public class ServidorMUD {
                 System.out.println("Conexão perdida com " + nomeJogador);
             } finally {
                 if (dadosPersonagem != null) {
-                    GerenciadorBD.salvarPersonagem(dadosPersonagem); // Salva vida e localização final
-                    GerenciadorBD.salvarInventario(nomeJogador, inventario); // Salva os itens
+                    salvarProgresso(); // Salva vida atual, sala atual, inventario e equipamentos
                 }
                 salaAtual.transmitirParaSala("[" + nomeJogador + " desconectou.]", this);
                 salaAtual.removerJogador(this);
@@ -457,13 +474,7 @@ public class ServidorMUD {
                 }
 
                 // 1. Cálculo de dano do jogador (Ataque base 5 + bônus de arma se tiver equipada)
-                int danoJogador = 5;
-                for (Item item : inventario) {
-                    if (item.getTipo().equalsIgnoreCase("arma")) {
-                        danoJogador += 5; // Bônus por ter uma arma no inventário
-                        break;
-                    }
-                }
+                int danoJogador = getAtaqueTotal();
 
                 // Aplica o dano no monstro
                 alvo.receberDano(danoJogador);
@@ -477,15 +488,16 @@ public class ServidorMUD {
                     salaAtual.removerMonstro(alvo);
                     
                     // Exemplo: Monstro dropa uma moeda ou item ao morrer
-                    salaAtual.adicionarItem(new Item("pocao", "Uma poção deixada pelo monstro", "pocao"));
+                    salaAtual.adicionarItem(new Item("pocao", "Uma poção deixada pelo monstro", "pocao", 0, 0));
                     escritor.println("O monstro deixou cair uma pocao!");
                     return;
                 }
 
                 // 3. Contra-ataque do monstro
-                int danoMonstro = alvo.getAtaque();
-                dadosPersonagem.vidaAtual -= danoMonstro;
-                escritor.println("O " + alvo.getNome() + " contra-ataca causando " + danoMonstro + " de dano em você!");
+                int danoBrutoMonstro = alvo.getAtaque();
+                int danoFinalMonstro = Math.max(1, danoBrutoMonstro - getDefesaTotal()); // Mínimo de 1 de dano
+                dadosPersonagem.vidaAtual -= danoFinalMonstro;
+                escritor.println("O " + alvo.getNome() + " contra-ataca causando " + danoFinalMonstro + " de dano em você!");
 
                 // 4. Verifica se o jogador morreu
                 if (dadosPersonagem.vidaAtual <= 0) {
@@ -563,11 +575,130 @@ public class ServidorMUD {
                 }
             }
 
+            // Comando EQUIPAR
+            else if (comandoLower.startsWith("equipar ")) {
+                String nomeItem = comandoLower.substring(8).trim();
+                Item itemParaEquipar = null;
+
+                synchronized (inventario) {
+                    for (Item item : inventario) {
+                        if (item.getNome().equalsIgnoreCase(nomeItem)) {
+                            itemParaEquipar = item;
+                            break;
+                        }
+                    }
+                }
+
+                if (itemParaEquipar == null) {
+                    escritor.println("Você não possui um '" + nomeItem + "' no seu inventário.");
+                    return;
+                }
+
+                // EQUIPAR ARMA
+                if (itemParaEquipar.getTipo().equalsIgnoreCase("arma")) {
+                    if (armaEquipada != null) {
+                        inventario.add(armaEquipada); // Devolve a arma antiga pro inventário
+                        escritor.println("Você desequipou: " + armaEquipada.getNome());
+                    }
+                    armaEquipada = itemParaEquipar;
+                    inventario.remove(itemParaEquipar);
+                    escritor.println("Você equipou a arma: " + armaEquipada.getNome() + " (+" + armaEquipada.getDano() + " Dano)");
+                } 
+                // EQUIPAR ARMADURA
+                else if (itemParaEquipar.getTipo().equalsIgnoreCase("armadura")) {
+                    if (armaduraEquipada != null) {
+                        inventario.add(armaduraEquipada); // Devolve a armadura antiga pro inventário
+                        escritor.println("Você desequipou: " + armaduraEquipada.getNome());
+                    }
+                    armaduraEquipada = itemParaEquipar;
+                    inventario.remove(itemParaEquipar);
+                    escritor.println("Você equipou a armadura: " + armaduraEquipada.getNome() + " (+" + armaduraEquipada.getDefesa() + " Defesa)");
+                } 
+                else {
+                    escritor.println("O item '" + nomeItem + "' não pode ser equipado.");
+                }
+            }
+
+            // Comando DESEQUIPAR
+            else if (comandoLower.startsWith("desequipar ")) {
+                String slotOuItem = comandoLower.substring(11).trim();
+
+                if (slotOuItem.equalsIgnoreCase("arma") || (armaEquipada != null && armaEquipada.getNome().equalsIgnoreCase(slotOuItem))) {
+                    if (armaEquipada != null) {
+                        inventario.add(armaEquipada);
+                        escritor.println("Você desequipou " + armaEquipada.getNome() + ".");
+                        armaEquipada = null;
+                    } else {
+                        escritor.println("Você não está empunhando nenhuma arma.");
+                    }
+                } 
+                else if (slotOuItem.equalsIgnoreCase("armadura") || (armaduraEquipada != null && armaduraEquipada.getNome().equalsIgnoreCase(slotOuItem))) {
+                    if (armaduraEquipada != null) {
+                        inventario.add(armaduraEquipada);
+                        escritor.println("Você desequipou " + armaduraEquipada.getNome() + ".");
+                        armaduraEquipada = null;
+                    } else {
+                        escritor.println("Você não está vestindo nenhuma armadura.");
+                    }
+                } 
+                else {
+                    escritor.println("Use 'desequipar arma' ou 'desequipar armadura'.");
+                }
+            }
+
+            // Comando EQUIPAMENTOS (ou 'eq')
+            else if (comandoLower.equals("equipamentos") || comandoLower.equals("eq")) {
+                escritor.println("=== Seus Equipamentos ===");
+                escritor.println("Mão direita: " + (armaEquipada != null ? armaEquipada.getNome() + " [Dano: +" + armaEquipada.getDano() + "]" : "Nenhum"));
+                escritor.println("Corpo:       " + (armaduraEquipada != null ? armaduraEquipada.getNome() + " [Defesa: +" + armaduraEquipada.getDefesa() + "]" : "Nenhum"));
+                escritor.println("Ataque Total: " + getAtaqueTotal() + " | Defesa Total: " + getDefesaTotal());
+            }
+
             // Final
             else {
                 escritor.println("Comando inválido. Use as direções, 'olhar', 'inventario' ou 'falar <texto>'.");
             }
             exibirPrompt();
+        }
+
+        public int getAtaqueTotal() {
+            int ataqueBase = 5;
+            if (armaEquipada != null) {
+                ataqueBase += armaEquipada.getDano();
+            }
+            return ataqueBase;
+        }
+
+        public int getDefesaTotal() {
+            int defesaBase = 0;
+            if (armaduraEquipada != null) {
+                defesaBase += armaduraEquipada.getDefesa();
+            }
+            return defesaBase;
+        }
+
+        private Item criarItemPorNome(String nome) {
+            if (nome.equalsIgnoreCase("espada")) {
+                return new Item("espada", "Uma espada simples.", "arma", 5, 0);
+            } else if (nome.equalsIgnoreCase("armadura")) {
+                return new Item("armadura", "Uma armadura leve que protege um pouco o corpo", "armadura", 0, 3);
+            }
+            return null;
+        }
+
+        // Método para salvar os itens equipados
+        public void salvarProgresso() {
+            if (dadosPersonagem != null) {
+                // 1. Copia o nome do item equipado atual para a DTO de salvamento
+                dadosPersonagem.armaEquipada = (this.armaEquipada != null) ? this.armaEquipada.getNome() : null;
+                dadosPersonagem.armaduraEquipada = (this.armaduraEquipada != null) ? this.armaduraEquipada.getNome() : null;
+
+                // 2. Salva os dados do personagem no SQLite
+                GerenciadorBD.salvarPersonagem(dadosPersonagem);
+
+                // 3. Salva o inventário (itens da mochila)
+                GerenciadorBD.salvarInventario(dadosPersonagem.nome, this.inventario);
+            }
         }
 
         private void mover(String direcao) {
