@@ -263,7 +263,7 @@ public class ServidorMUD {
                 escritor = new PrintWriter(socket.getOutputStream(), true);
 
                 escritor.println("==========================================");
-                escritor.println("                 MUD v0.0.5               ");
+                escritor.println("                 MUD v0.0.6               ");
                 escritor.println("==========================================");
                 escritor.print("Digite o seu nome: ");
                 escritor.flush();
@@ -507,6 +507,59 @@ public class ServidorMUD {
                 } else {
                     escritor.println("Vida atual de " + alvo.getNome() + ": [" + alvo.getVidaAtual() + "/" + alvo.getVidaMax() + "]");
                     escritor.println("Sua vida atual: [" + dadosPersonagem.vidaAtual + "/" + dadosPersonagem.vidaMax + "]");
+                }
+            }
+
+            // Comando USAR (ex: usar pocao)
+            else if (comandoLower.startsWith("usar ")) {
+                String nomeItem = comandoLower.substring(5).trim();
+                Item itemParaUsar = null;
+
+                // Procura o item no inventário
+                synchronized (inventario) {
+                    for (Item item : inventario) {
+                        if (item.getNome().equalsIgnoreCase(nomeItem)) {
+                            itemParaUsar = item;
+                            break;
+                        }
+                    }
+                }
+
+                if (itemParaUsar == null) {
+                    escritor.println("Você não tem um '" + nomeItem + "' no seu inventário.");
+                    return;
+                }
+
+                // Lógica para POÇÃO DE VIDA
+                if (itemParaUsar.getTipo().equalsIgnoreCase("pocao")) {
+                    // Checa se a vida já está cheia
+                    if (dadosPersonagem.vidaAtual >= dadosPersonagem.vidaMax) {
+                        escritor.println("Sua vida já está no máximo!");
+                        return;
+                    }
+
+                    int valorCura = 15; // Quantidade de vida restaurada
+                    int vidaAnterior = dadosPersonagem.vidaAtual;
+                    
+                    // Aplica a cura garantindo que não ultrapasse o máximo
+                    dadosPersonagem.vidaAtual = Math.min(dadosPersonagem.vidaMax, dadosPersonagem.vidaAtual + valorCura);
+                    int curaReal = dadosPersonagem.vidaAtual - vidaAnterior;
+
+                    // Consome a poção (remove do inventário)
+                    inventario.remove(itemParaUsar);
+
+                    // Mensagens de feedback
+                    escritor.println("Você tomou a poção e recuperou " + curaReal + " pontos de vida!");
+                    escritor.println("Vida atual: [" + dadosPersonagem.vidaAtual + "/" + dadosPersonagem.vidaMax + "]");
+                    
+                    salaAtual.transmitirParaSala("[" + nomeJogador + " tomou uma poção de vida.]", this);
+
+                    // Persiste as alterações no banco de dados
+                    GerenciadorBD.salvarPersonagem(dadosPersonagem);
+                    GerenciadorBD.salvarInventario(nomeJogador, inventario);
+
+                } else {
+                    escritor.println("Você não pode usar o item '" + nomeItem + "' desta forma.");
                 }
             }
 
