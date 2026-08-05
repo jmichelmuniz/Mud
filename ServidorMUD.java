@@ -263,7 +263,7 @@ public class ServidorMUD {
                 escritor = new PrintWriter(socket.getOutputStream(), true);
 
                 escritor.println("==========================================");
-                escritor.println("                 MUD v0.0.3               ");
+                escritor.println("                 MUD v0.0.4               ");
                 escritor.println("==========================================");
                 escritor.print("Digite o seu nome: ");
                 escritor.flush();
