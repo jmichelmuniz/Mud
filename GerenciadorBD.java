@@ -7,7 +7,7 @@ import java.sql.Statement;
 
 public class GerenciadorBD {
     // Define o arquivo local do banco de dados
-    private static final String URL = "jdbc:sqlite:mud_jogo.db";
+    private static final String URL = "jdbc:sqlite:/app/data/mud.db";
 
     // Inicializa o banco e cria a tabela se ela não existir
     public static void inicializarBanco() {

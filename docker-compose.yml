@@ -1,0 +1,9 @@
+services:
+  mud:
+    build: .
+    container_name: mud-server
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./db:/app/data
+    restart: unless-stopped
