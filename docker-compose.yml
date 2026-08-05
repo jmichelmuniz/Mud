@@ -7,3 +7,15 @@ services:
     volumes:
       - ./db:/app/data
     restart: unless-stopped
+
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: mud-tunnel
+    restart: unless-stopped
+    command:
+      - "tcp"
+      - "mud:4000"
+    environment:
+      NGROK_AUTHTOKEN: "3HEneJoFuQ9FFVfc9c2d3AKExzc_4NUPzGpbSgMPFzsPAsoHJ"
+    depends_on:
+      - mud
