@@ -11,6 +11,8 @@ public class GerenciadorBD {
 
     // Inicializa o banco e cria a tabela se ela não existir
     public static void inicializarBanco() {
+
+        // Tabela personagens
         String sql = "CREATE TABLE IF NOT EXISTS personagens (" +
                      "id INTEGER PRIMARY KEY AUTOINCREMENT," +
                      "nome TEXT UNIQUE NOT NULL," +
@@ -30,6 +32,29 @@ public class GerenciadorBD {
             System.err.println("Erro ao inicializar banco: " + e.getMessage());
         }
 
+        // Tabela itens base
+        String sqlItensBase = "CREATE TABLE IF NOT EXISTS itens_base (" +
+                              "nome TEXT PRIMARY KEY," +
+                              "descricao TEXT NOT NULL," +
+                              "tipo TEXT NOT NULL," +
+                              "dano INTEGER DEFAULT 0," +
+                              "defesa INTEGER DEFAULT 0" +
+                              ");";
+
+        try (Connection conn = DriverManager.getConnection(URL);
+            Statement stmt = conn.createStatement()) {
+            stmt.execute(sqlItensBase);
+            
+            // Insere itens padrão caso a tabela esteja vazia
+            stmt.execute("INSERT OR IGNORE INTO itens_base VALUES ('espada', 'Uma espada de ferro afiada.', 'arma', 8, 0);");
+            stmt.execute("INSERT OR IGNORE INTO itens_base VALUES ('machado', 'Um machado pesado de combate.', 'arma', 12, 0);");
+            stmt.execute("INSERT OR IGNORE INTO itens_base VALUES ('escudo', 'Um escudo de madeira reforçado.', 'armadura', 0, 3);");
+            stmt.execute("INSERT OR IGNORE INTO itens_base VALUES ('pocao', 'Restaura pontos de vida.', 'pocao', 0, 0);");
+        } catch (SQLException e) {
+            System.err.println("Erro ao criar tabela de itens base: " + e.getMessage());
+        }
+
+        // Tabela inventarios
         String sqlItens = "CREATE TABLE IF NOT EXISTS inventarios (" +
                           "id INTEGER PRIMARY KEY AUTOINCREMENT," +
                           "jogador_nome TEXT NOT NULL," +
@@ -135,6 +160,31 @@ public class GerenciadorBD {
             this.armaEquipada = armaEquipada;
             this.armaduraEquipada = armaduraEquipada;
         }
+    }
+
+    // Método de busca de itens no banco de dados
+    public static Item carregarItemBase(String nome) {
+        String sql = "SELECT nome, descricao, tipo, dano, defesa FROM itens_base WHERE LOWER(nome) = LOWER(?)";
+        
+        try (Connection conn = DriverManager.getConnection(URL);
+            PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            
+            pstmt.setString(1, nome.trim());
+            ResultSet rs = pstmt.executeQuery();
+
+            if (rs.next()) {
+                return new Item(
+                    rs.getString("nome"),
+                    rs.getString("descricao"),
+                    rs.getString("tipo"),
+                    rs.getInt("dano"),
+                    rs.getInt("defesa")
+                );
+            }
+        } catch (SQLException e) {
+            System.err.println("Erro ao carregar item base do banco: " + e.getMessage());
+        }
+        return null;
     }
 
     // Método para carregar os itens salvos do jogador

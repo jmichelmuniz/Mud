@@ -67,15 +67,10 @@ public class ServidorMUD {
         floresta.adicionarMonstro(goblin);
         floresta.adicionarMonstro(lobo);
 
-        // Itens criados
-        Item espada = new Item("espada", "Uma espada simples.", "arma", 5, 0);
-        Item pocao = new Item("pocao", "Um pequeno frasco com um liquido vermelho", "pocao", 0, 0);
-        Item armadura = new Item("armadura", "Uma armadura leve que protege um pouco o corpo", "armadura", 0, 3);
-
         // Adicionando itens iniciais na sala
-        templo.adicionarItem(pocao);
-        floresta.adicionarItem(espada);
-        templo.adicionarItem(armadura);
+        floresta.adicionarItem(ItemFactory.criarItem("espada"));
+        templo.adicionarItem(ItemFactory.criarItem("escudo"));
+        praca.adicionarItem(ItemFactory.criarItem("pocao"));
     }
 
     // Classe que representa uma Sala do jogo
@@ -267,7 +262,7 @@ public class ServidorMUD {
                 escritor = new PrintWriter(socket.getOutputStream(), true);
 
                 escritor.println("==========================================");
-                escritor.println("                 MUD v0.0.7               ");
+                escritor.println("                 MUD v0.0.8               ");
                 escritor.println("==========================================");
                 escritor.print("Digite o seu nome: ");
                 escritor.flush();
@@ -307,26 +302,20 @@ public class ServidorMUD {
                     escritor.println("\nConta criada com sucesso! Aproveite o jogo, " + nomeJogador + ".");
                 }
 
-                // Carrega os itens equipados
-                if (dadosPersonagem != null) {
-                    // RESTAURAR ARMA EQUIPADA
-                    if (dadosPersonagem.armaEquipada != null) {
-                        // Recria o objeto Item correspondente ao nome salvo
-                        this.armaEquipada = criarItemPorNome(dadosPersonagem.armaEquipada);
-                    }
+                // Restaura a arma e armadura salvas no SQLite
+                this.armaEquipada = ItemFactory.criarItem(dadosPersonagem.armaEquipada);
+                this.armaduraEquipada = ItemFactory.criarItem(dadosPersonagem.armaduraEquipada);
 
-                    // RESTAURAR ARMADURA EQUIPADA
-                    if (dadosPersonagem.armaduraEquipada != null) {
-                        this.armaduraEquipada = criarItemPorNome(dadosPersonagem.armaduraEquipada);
+                // Restaura o inventário do jogador a partir das Strings do banco
+                List<String> nomesSalvos = GerenciadorBD.carregarInventario(dadosPersonagem.nome);
+                synchronized (inventario) {
+                    inventario.clear();
+                    for (String nomeItem : nomesSalvos) {
+                        Item item = ItemFactory.criarItem(nomeItem);
+                        if (item != null) {
+                            inventario.add(item);
+                        }
                     }
-                }
-
-                // Carrega os nomes dos itens do banco e reconstrói os objetos Item
-                java.util.List<String> nomesItensSalvos = GerenciadorBD.carregarInventario(nomeJogador);
-                for (String nomeItem : nomesItensSalvos) {
-                    // Um mini-banco de dados estático de itens para reconstruir o objeto (exemplo simples)
-                    if (nomeItem.equals("espada")) inventario.add(new Item("espada", "Uma espada de ferro.", "arma", 5, 0));
-                    if (nomeItem.equals("pocao")) inventario.add(new Item("pocao", "Uma poção de vida.", "pocao", 0, 0));
                 }
 
                 // Posiciona na sala recuperada do banco (se a sala existir no mapa)
