@@ -262,7 +262,7 @@ public class ServidorMUD {
                 escritor = new PrintWriter(socket.getOutputStream(), true);
 
                 escritor.println("==========================================");
-                escritor.println("                 MUD v0.0.8               ");
+                escritor.println("                 MUD v0.0.9               ");
                 escritor.println("==========================================");
                 escritor.print("Digite o seu nome: ");
                 escritor.flush();
@@ -327,7 +327,7 @@ public class ServidorMUD {
                 salaAtual.adicionarJogador(this);
 
                 escritor.println("\nBem-vindo de volta, " + nomeJogador + "!");
-                escritor.println("Atributos: Vida [" + dadosPersonagem.vidaAtual + "/" + dadosPersonagem.vidaMax + "]");
+                escritor.println("Atributos: Vida [" + dadosPersonagem.vidaAtual + "/" + dadosPersonagem.getVidaMax() + "]");
 
                 salaAtual.transmitirParaSala("[" + nomeJogador + " materializou-se na sala.]", this);
                 escritor.println(salaAtual.obterDescricaoCompleta(this));
@@ -462,8 +462,14 @@ public class ServidorMUD {
                     return;
                 }
 
-                // 1. Cálculo de dano do jogador (Ataque base 5 + bônus de arma se tiver equipada)
-                int danoJogador = getAtaqueTotal();
+                // 1. Cálculo de dano do jogador
+                int danoJogador;
+
+                if (armaEquipada != null && armaEquipada.getTipo().equalsIgnoreCase("arco")) {
+                    danoJogador = getAtaqueRangedTotal(); // Utiliza a Pontaria
+                } else {
+                    danoJogador = getAtaqueMeleeTotal();  // Utiliza a Força (armas corpo a corpo ou desarmado)
+                }
 
                 // Aplica o dano no monstro
                 alvo.receberDano(danoJogador);
@@ -494,7 +500,7 @@ public class ServidorMUD {
                     escritor.println("Ressuscitando no Templo...");
                     
                     // Reseta a vida e envia de volta para o Templo (Sala ID 1)
-                    dadosPersonagem.vidaAtual = dadosPersonagem.vidaMax;
+                    dadosPersonagem.vidaAtual = dadosPersonagem.getVidaMax();
                     
                     salaAtual.transmitirParaSala("[" + nomeJogador + " foi derrotado por " + alvo.getNome() + "!]", this);
                     salaAtual.removerJogador(this);
@@ -507,7 +513,7 @@ public class ServidorMUD {
                     escritor.println(salaAtual.obterDescricaoCompleta(this));
                 } else {
                     escritor.println("Vida atual de " + alvo.getNome() + ": [" + alvo.getVidaAtual() + "/" + alvo.getVidaMax() + "]");
-                    escritor.println("Sua vida atual: [" + dadosPersonagem.vidaAtual + "/" + dadosPersonagem.vidaMax + "]");
+                    escritor.println("Sua vida atual: [" + dadosPersonagem.vidaAtual + "/" + dadosPersonagem.getVidaMax() + "]");
                 }
             }
 
@@ -534,7 +540,7 @@ public class ServidorMUD {
                 // Lógica para POÇÃO DE VIDA
                 if (itemParaUsar.getTipo().equalsIgnoreCase("pocao")) {
                     // Checa se a vida já está cheia
-                    if (dadosPersonagem.vidaAtual >= dadosPersonagem.vidaMax) {
+                    if (dadosPersonagem.vidaAtual >= dadosPersonagem.getVidaMax()) {
                         escritor.println("Sua vida já está no máximo!");
                         return;
                     }
@@ -543,7 +549,7 @@ public class ServidorMUD {
                     int vidaAnterior = dadosPersonagem.vidaAtual;
                     
                     // Aplica a cura garantindo que não ultrapasse o máximo
-                    dadosPersonagem.vidaAtual = Math.min(dadosPersonagem.vidaMax, dadosPersonagem.vidaAtual + valorCura);
+                    dadosPersonagem.vidaAtual = Math.min(dadosPersonagem.getVidaMax(), dadosPersonagem.vidaAtual + valorCura);
                     int curaReal = dadosPersonagem.vidaAtual - vidaAnterior;
 
                     // Consome a poção (remove do inventário)
@@ -551,7 +557,7 @@ public class ServidorMUD {
 
                     // Mensagens de feedback
                     escritor.println("Você tomou a poção e recuperou " + curaReal + " pontos de vida!");
-                    escritor.println("Vida atual: [" + dadosPersonagem.vidaAtual + "/" + dadosPersonagem.vidaMax + "]");
+                    escritor.println("Vida atual: [" + dadosPersonagem.vidaAtual + "/" + dadosPersonagem.getVidaMax() + "]");
                     
                     salaAtual.transmitirParaSala("[" + nomeJogador + " tomou uma poção de vida.]", this);
 
@@ -635,12 +641,26 @@ public class ServidorMUD {
                 }
             }
 
-            // Comando EQUIPAMENTOS (ou 'eq')
-            else if (comandoLower.equals("equipamentos") || comandoLower.equals("eq")) {
-                escritor.println("=== Seus Equipamentos ===");
-                escritor.println("Mão direita: " + (armaEquipada != null ? armaEquipada.getNome() + " [Dano: +" + armaEquipada.getDano() + "]" : "Nenhum"));
-                escritor.println("Corpo:       " + (armaduraEquipada != null ? armaduraEquipada.getNome() + " [Defesa: +" + armaduraEquipada.getDefesa() + "]" : "Nenhum"));
-                escritor.println("Ataque Total: " + getAtaqueTotal() + " | Defesa Total: " + getDefesaTotal());
+            // Comando Ficha ou Status
+            else if (comandoLower.equals("ficha") || comandoLower.equals("status")) {
+                escritor.println("==========================================");
+                escritor.println(" FICHA DE PERSONAGEM: " + dadosPersonagem.nome);
+                escritor.println(" Nível: " + dadosPersonagem.nivel + " | XP: " + dadosPersonagem.xp + "/" + dadosPersonagem.getXpNecessario());
+                escritor.println("------------------------------------------");
+                escritor.println(" Vida: " + dadosPersonagem.vidaAtual + "/" + dadosPersonagem.getVidaMax());
+                escritor.println(" Mana: " + dadosPersonagem.manaAtual + "/" + dadosPersonagem.getManaMax());
+                escritor.println("------------------------------------------");
+                escritor.println(" ATRIBUTOS:");
+                escritor.println("  [FOR] Força:      " + dadosPersonagem.forca + " (Dano Melee: " + getAtaqueMeleeTotal() + ")");
+                escritor.println("  [VIT] Vitalidade: " + dadosPersonagem.vitalidade + " (Defesa Base: " + dadosPersonagem.getDefesaBase() + ")");
+                escritor.println("  [ENG] Energia:    " + dadosPersonagem.energia + " (Dano Mágico: " + getDanoMagicoTotal() + ")");
+                escritor.println("  [PNT] Pontaria:   " + dadosPersonagem.pontaria + " (Dano Distância: " + getAtaqueRangedTotal() + ")");
+                escritor.println("------------------------------------------");
+                escritor.println(" EQUIPAMENTOS:");
+                escritor.println("  Arma:     " + (armaEquipada != null ? armaEquipada.getNome() : "Nenhuma"));
+                escritor.println("  Armadura: " + (armaduraEquipada != null ? armaduraEquipada.getNome() : "Nenhuma"));
+                escritor.println("  Defesa Total: " + getDefesaTotal());
+                escritor.println("==========================================");
             }
 
             // Final
@@ -650,22 +670,71 @@ public class ServidorMUD {
             exibirPrompt();
         }
 
-        public int getAtaqueTotal() {
-            int ataqueBase = 5;
-            if (armaEquipada != null) {
-                ataqueBase += armaEquipada.getDano();
+        // Classes auxiliares
+
+        // Dano físico corpo a corpo (Força + Arma)
+        public int getAtaqueMeleeTotal() {
+            int danoBase = dadosPersonagem.forca * 2;
+            if (armaEquipada != null && armaEquipada.getTipo().equalsIgnoreCase("arma")) {
+                danoBase += armaEquipada.getDano();
             }
-            return ataqueBase;
+            return danoBase;
         }
 
+        // Dano físico a distância (Pontaria + Arma)
+        public int getAtaqueRangedTotal() {
+            int danoBase = dadosPersonagem.pontaria * 2;
+            if (armaEquipada != null && armaEquipada.getTipo().equalsIgnoreCase("arco")) {
+                danoBase += armaEquipada.getDano();
+            }
+            return danoBase;
+        }
+
+        // Dano mágico (Energia)
+        public int getDanoMagicoTotal() {
+            return dadosPersonagem.energia * 3;
+        }
+
+        // Defesa Total (Armadura Base da Vitalidade + Armadura Equipada)
         public int getDefesaTotal() {
-            int defesaBase = 0;
+            int defesa = dadosPersonagem.getDefesaBase();
             if (armaduraEquipada != null) {
-                defesaBase += armaduraEquipada.getDefesa();
+                defesa += armaduraEquipada.getDefesa();
             }
-            return defesaBase;
+            return defesa;
         }
 
+        
+
+        // Sistema de Ganho de XP e Subida de Nível
+        public void ganharXp(int quantidade) {
+            dadosPersonagem.xp += quantidade;
+            escritor.println("Você ganhou " + quantidade + " de XP!");
+
+            while (dadosPersonagem.xp >= dadosPersonagem.getXpNecessario()) {
+                dadosPersonagem.xp -= dadosPersonagem.getXpNecessario();
+                dadosPersonagem.nivel++;
+
+                // Aumenta a base de todos os atributos ao evoluir (+2 em cada)
+                dadosPersonagem.forca += 2;
+                dadosPersonagem.vitalidade += 2;
+                dadosPersonagem.energia += 2;
+                dadosPersonagem.pontaria += 2;
+
+                // Recupera a vida e a mana ao subir de nível
+                dadosPersonagem.vidaAtual = dadosPersonagem.getVidaMax();
+                dadosPersonagem.manaAtual = dadosPersonagem.getManaMax();
+
+                escritor.println("\n==========================================");
+                escritor.println(" PARABÉNS! Você subiu para o Nível " + dadosPersonagem.nivel + "!");
+                escritor.println(" Todos os seus atributos aumentaram (+2)!");
+                escritor.println(" Vida e Mana foram totalmente restauradas!");
+                escritor.println("==========================================\n");
+            }
+            salvarProgresso();
+        }
+
+        // Método para criar os itens        
         private Item criarItemPorNome(String nome) {
             if (nome.equalsIgnoreCase("espada")) {
                 return new Item("espada", "Uma espada simples.", "arma", 5, 0);
