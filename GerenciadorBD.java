@@ -17,8 +17,14 @@ public class GerenciadorBD {
                      "id INTEGER PRIMARY KEY AUTOINCREMENT," +
                      "nome TEXT UNIQUE NOT NULL," +
                      "senha TEXT NOT NULL," +
+                     "nivel INTEGER DEFAULT 1," +
+                     "xp INTEGER DEFAULT 0," +
                      "vida_atual INTEGER DEFAULT 100," +
-                     "vida_max INTEGER DEFAULT 100," +
+                     "mana_atual INTEGER DEFAULT 50," +
+                     "forca INTEGER DEFAULT 5," +
+                     "vitalidade INTEGER DEFAULT 5," +
+                     "energia INTEGER DEFAULT 5," +
+                     "pontaria INTEGER DEFAULT 5," +
                      "sala_id INTEGER DEFAULT 1," +
                      "arma_equipada TEXT," +
                      "armadura_equipada TEXT" +
@@ -84,7 +90,7 @@ public class GerenciadorBD {
 
     // Método para validar o login (retorna os dados se a senha estiver certa)
     public static PersonagemDados autenticarJogador(String nome, String senhaDigitada) {
-        String sql = "SELECT senha, vida_atual, vida_max, sala_id, arma_equipada, armadura_equipada FROM personagens WHERE nome = ?";
+        String sql = "SELECT senha, nivel, xp, vida_atual, mana_atual, forca, vitalidade, energia, pontaria, sala_id, arma_equipada, armadura_equipada FROM personagens WHERE nome = ?";
         try (Connection conn = DriverManager.getConnection(URL);
             PreparedStatement pstmt = conn.prepareStatement(sql)) {
             
@@ -95,7 +101,20 @@ public class GerenciadorBD {
                 String hashBanco = rs.getString("senha");
                 // Usa nossa classe de segurança para validar
                 if (Seguranca.verificarSenha(senhaDigitada, hashBanco)) {
-                    return new PersonagemDados(nome, rs.getInt("vida_atual"), rs.getInt("vida_max"), rs.getInt("sala_id"), rs.getString("arma_equipada"), rs.getString("armadura_equipada"));
+                    return new PersonagemDados(
+                                            nome,
+                                            rs.getInt("nivel"),
+                                            rs.getInt("xp"),
+                                            rs.getInt("vida_atual"),
+                                            rs.getInt("mana_atual"),
+                                            rs.getInt("forca"),
+                                            rs.getInt("vitalidade"),
+                                            rs.getInt("energia"),
+                                            rs.getInt("pontaria"),
+                                            rs.getInt("sala_id"),
+                                            rs.getString("arma_equipada"),
+                                            rs.getString("armadura_equipada")
+                                            );
                 }
             }
         } catch (SQLException e) {
@@ -116,7 +135,7 @@ public class GerenciadorBD {
             pstmt.setString(2, senhaCriptografada);
             pstmt.executeUpdate();
             
-            return new PersonagemDados(nome, 100, 100, 1, null, null);
+            return new PersonagemDados(nome, 1, 0, 140, 80, 5, 5, 5, 5, 1, null, null);
         } catch (SQLException e) {
             System.err.println("Erro ao cadastrar: " + e.getMessage());
             return null;
@@ -125,41 +144,69 @@ public class GerenciadorBD {
 
     // Salva o progresso atual do personagem
     public static void salvarPersonagem(PersonagemDados p) {
-        String sql = "UPDATE personagens SET vida_atual = ?, vida_max = ?, sala_id = ?, arma_equipada = ?, armadura_equipada = ? WHERE nome = ?";
+        String sql = "UPDATE personagens SET nivel = ?, xp = ?, vida_atual = ?, mana_atual = ?, " +
+                     "forca = ?, vitalidade = ?, energia = ?, pontaria = ?, sala_id = ?, " +
+                     "arma_equipada = ?, armadura_equipada = ? WHERE nome = ?";
 
         try (Connection conn = DriverManager.getConnection(URL);
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                pstmt.setInt(1, p.nivel);
+                pstmt.setInt(2, p.xp);
+                pstmt.setInt(3, p.vidaAtual);
+                pstmt.setInt(4, p.manaAtual);
+                pstmt.setInt(5, p.forca);
+                pstmt.setInt(6, p.vitalidade);
+                pstmt.setInt(7, p.energia);
+                pstmt.setInt(8, p.pontaria);
+                pstmt.setInt(9, p.salaId);
+                pstmt.setString(10, p.armaEquipada);
+                pstmt.setString(11, p.armaduraEquipada);
+                pstmt.setString(12, p.nome);
+                pstmt.executeUpdate();
+            }
             
-            pstmt.setInt(1, p.vidaAtual);
-            pstmt.setInt(2, p.vidaMax);
-            pstmt.setInt(3, p.salaId);
-            pstmt.setString(4, p.armaEquipada);
-            pstmt.setString(5, p.armaduraEquipada);
-            pstmt.setString(6, p.nome);
-            pstmt.executeUpdate();
-            
-        } catch (SQLException e) {
+        catch (SQLException e) {
             System.err.println("Erro ao salvar personagem " + p.nome + ": " + e.getMessage());
         }
     }
 
-    // Classe auxiliar interna para transportar os dados
+    // Classe auxiliar interna para transportar os dados (DTO)
     public static class PersonagemDados {
         public String nome;
+        public int nivel;
+        public int xp;
         public int vidaAtual;
-        public int vidaMax;
+        public int manaAtual;
+        public int forca;
+        public int vitalidade;
+        public int energia;
+        public int pontaria;
         public int salaId;
         public String armaEquipada;
         public String armaduraEquipada;
 
-        public PersonagemDados(String nome, int vidaAtual, int vidaMax, int salaId, String armaEquipada, String armaduraEquipada) {
+        public PersonagemDados(String nome, int nivel, int xp, int vidaAtual, int manaAtual, 
+                            int forca, int vitalidade, int energia, int pontaria, 
+                            int salaId, String armaEquipada, String armaduraEquipada) {
             this.nome = nome;
+            this.nivel = nivel;
+            this.xp = xp;
             this.vidaAtual = vidaAtual;
-            this.vidaMax = vidaMax;
+            this.manaAtual = manaAtual;
+            this.forca = forca;
+            this.vitalidade = vitalidade;
+            this.energia = energia;
+            this.pontaria = pontaria;
             this.salaId = salaId;
             this.armaEquipada = armaEquipada;
             this.armaduraEquipada = armaduraEquipada;
         }
+        
+        // Cálculos Derivados dos Atributos
+        public int getVidaMax() { return 80 + (vitalidade * 12); }
+        public int getManaMax() { return 30 + (energia * 10); }
+        public int getDefesaBase() { return vitalidade / 2; }
+        public int getXpNecessario() { return nivel * 100; }
     }
 
     // Método de busca de itens no banco de dados
