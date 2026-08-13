@@ -4,20 +4,21 @@ public class Monstro {
     private int vidaAtual;
     private final int vidaMax;
     private final int ataque;
-    private final int experienciaConcedida;
+    private final int xpConcedido;
 
-    public Monstro(String nome, int vidaMax, int ataque, int experienciaConcedida) {
+    public Monstro(String nome, int vidaMax, int ataque, int xpConcedido) {
         this.nome = nome;
         this.vidaMax = vidaMax;
         this.vidaAtual = vidaMax;
         this.ataque = ataque;
-        this.experienciaConcedida = experienciaConcedida;
+        this.xpConcedido = xpConcedido;
     }
 
     public String getNome() { return nome; }
     public int getVidaAtual() { return vidaAtual; }
     public int getVidaMax() { return vidaMax; }
     public int getAtaque() { return ataque; }
+    public int getXpConcedido() { return xpConcedido; }
     
     public void receberDano(int dano) {
         this.vidaAtual = Math.max(0, this.vidaAtual - dano);

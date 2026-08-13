@@ -262,7 +262,7 @@ public class ServidorMUD {
                 escritor = new PrintWriter(socket.getOutputStream(), true);
 
                 escritor.println("==========================================");
-                escritor.println("                 MUD v0.0.9               ");
+                escritor.println("                 MUD v0.0.10              ");
                 escritor.println("==========================================");
                 escritor.print("Digite o seu nome: ");
                 escritor.flush();
@@ -480,6 +480,7 @@ public class ServidorMUD {
                 if (!alvo.estaVivo()) {
                     escritor.println("Você derrotou o " + alvo.getNome() + "!");
                     salaAtual.transmitirParaSala("[" + alvo.getNome() + " caiu derrotado por " + nomeJogador + "!]", this);
+                    ganharXp(alvo.getXpConcedido());
                     salaAtual.removerMonstro(alvo);
                     
                     // Exemplo: Monstro dropa uma moeda ou item ao morrer
