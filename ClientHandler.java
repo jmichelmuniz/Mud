@@ -55,7 +55,7 @@ public class ClientHandler implements Runnable {
 
     private boolean realizarAutenticacao() throws IOException {
         escritor.println("==========================================");
-        escritor.println("                 MUD v0.0.15              ");
+        escritor.println("                 MUD v0.0.16              ");
         escritor.println("==========================================");
         escritor.print("Digite seu nome: ");
         escritor.flush();
@@ -162,7 +162,7 @@ public class ClientHandler implements Runnable {
                         escritor.println("\nOutros aventureiros presentes:");
                         temOutro = true;
                     }
-                    escritor.println("- " + outro.getJogador().getDados().nome);
+                    escritor.println("- " + outro.getJogador().getDados().nome + "   HP[" + outro.getJogador().getDados().vidaAtual + "/" + outro.getJogador().getDados().getVidaMax() + "]");
                 }
             }
         }
@@ -254,6 +254,7 @@ public class ClientHandler implements Runnable {
         jogador.setAlvoAtual(alvo);
         GerenciadorCombate.registrarCombate(this);
         escritor.println("\n[COMBATE INICIADO] Você está atacando " + alvo.getNome() + "!");
+        salaAtual.notificarOutros(this, "\n⚔️ " + jogador.getDados().nome + " entrou em combate contra " + alvo.getNome() + "!");
     }
 
     // Este método é chamado automaticamente a cada 2.5s pelo GerenciadorCombate
@@ -278,7 +279,13 @@ public class ClientHandler implements Runnable {
         // 2. Verifica se o monstro morreu
         if (!alvo.estaVivo()) {
             escritor.println("💀 Você derrotou " + alvo.getNome() + "!");
+            salaAtual.notificarOutros(this, "\n💀 " + d.nome + " derrotou " + alvo.getNome() + "!");
+            int nivelAntigo = d.nivel;
             escritor.println(jogador.ganharXp(alvo.getXpConcedido()));
+
+            if (d.nivel > nivelAntigo) {
+                salaAtual.notificarOutros(this, "\n✨ " + d.nome + " subiu para o Nível " + d.nivel + "!");
+            }
             
             for (Item item : alvo.gerarLoot()) {
                 salaAtual.adicionarItem(item);
@@ -301,6 +308,7 @@ public class ClientHandler implements Runnable {
         if (d.vidaAtual == 0) {
             escritor.println("\n*** VOCÊ MORREU! ***");
             escritor.println("Ressuscitando no Templo...");
+            salaAtual.notificarOutros(this, "\n☠️ " + d.nome + " foi derrotado por " + alvo.getNome() + "!");
             d.vidaAtual = d.getVidaMax();
             this.salaAtual = ServidorMUD.mapa.get(1);
             jogador.encerrarCombate();
@@ -319,6 +327,7 @@ public class ClientHandler implements Runnable {
         jogador.encerrarCombate();
         GerenciadorCombate.removerCombate(this);
         escritor.println("Você se desengajou do combate!");
+        salaAtual.notificarOutros(this, "\n⚔️ " + jogador.getDados().nome + " desengajou do combate " + "!");
     }
 
     public void salvarProgresso() {
@@ -397,6 +406,8 @@ public class ClientHandler implements Runnable {
         jogador.adicionarAoInventario(item);
 
         escritor.println("Você pegou: " + item.getNome());
+        salaAtual.notificarOutros(this, "\n" + jogador.getDados().nome + " pegou o item " + item.getNome() + " do chão.");
+
         salvarProgresso();
     }
 
@@ -417,6 +428,8 @@ public class ClientHandler implements Runnable {
         salaAtual.adicionarItem(item);
 
         escritor.println("Você soltou " + item.getNome() + " no chão.");
+        salaAtual.notificarOutros(this, "\n" + jogador.getDados().nome + " soltou " + item.getNome() + " no chão.");
+
         salvarProgresso();
     }
 
