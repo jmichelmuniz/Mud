@@ -3,21 +3,15 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.Socket;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 public class ClientHandler implements Runnable {
     private final Socket socket;
     private PrintWriter escritor;
     private BufferedReader leitor;
-    
-    private PersonagemDados dadosPersonagem;
+
+    private Jogador jogador;
     private Sala salaAtual;
-    private final List<Item> inventario = Collections.synchronizedList(new ArrayList<>());
-    
-    private Item armaEquipada = null;
-    private Item armaduraEquipada = null;
 
     public ClientHandler(Socket socket) {
         this.socket = socket;
@@ -34,7 +28,7 @@ public class ClientHandler implements Runnable {
             }
 
             carregarEstadoJogador();
-            escritor.println("\nBem-vindo ao MUD, " + dadosPersonagem.nome + "!");
+            escritor.println("\nBem-vindo ao MUD, " + jogador.getDados().nome + "!");
             processarOlhar();
 
             String linha;
@@ -57,7 +51,7 @@ public class ClientHandler implements Runnable {
 
     private boolean realizarAutenticacao() throws IOException {
         escritor.println("==========================================");
-        escritor.println("                 MUD v0.0.12              ");
+        escritor.println("                 MUD v0.0.13              ");
         escritor.println("==========================================");
         escritor.print("Digite seu nome: ");
         escritor.flush();
@@ -65,43 +59,29 @@ public class ClientHandler implements Runnable {
 
         if (nome == null || nome.isBlank()) return false;
 
+        PersonagemDados dados;
         if (GerenciadorBD.jogadorExiste(nome)) {
             escritor.print("Digite sua senha: ");
             escritor.flush();
             String senha = leitor.readLine();
-            dadosPersonagem = GerenciadorBD.autenticarJogador(nome, senha);
-            if (dadosPersonagem == null) {
+            dados = GerenciadorBD.autenticarJogador(nome, senha);
+            if (dados == null) {
                 escritor.println("Senha incorreta! Conexão encerrada.");
                 return false;
             }
         } else {
             escritor.println("Novo personagem! Digite uma senha para cadastrar:");
             String senha = leitor.readLine();
-            dadosPersonagem = GerenciadorBD.cadastrarJogador(nome, senha);
+            dados = GerenciadorBD.cadastrarJogador(nome, senha);
         }
+
+        this.jogador = new Jogador(dados);
         return true;
     }
 
     private void carregarEstadoJogador() {
-        this.salaAtual = ServidorMUD.mapa.getOrDefault(dadosPersonagem.salaId, ServidorMUD.mapa.get(1));
-        
-        // Restaura Equipamentos
-        if (dadosPersonagem.armaEquipada != null) {
-            this.armaEquipada = ItemFactory.criarItem(dadosPersonagem.armaEquipada);
-        }
-        if (dadosPersonagem.armaduraEquipada != null) {
-            this.armaduraEquipada = ItemFactory.criarItem(dadosPersonagem.armaduraEquipada);
-        }
-
-        // Restaura Inventário
-        List<String> itensSalvos = GerenciadorBD.carregarInventario(dadosPersonagem.nome);
-        synchronized (inventario) {
-            inventario.clear();
-            for (String itemNome : itensSalvos) {
-                Item item = ItemFactory.criarItem(itemNome);
-                if (item != null) inventario.add(item);
-            }
-        }
+        this.salaAtual = ServidorMUD.mapa.getOrDefault(jogador.getDados().salaId, ServidorMUD.mapa.get(1));
+        jogador.carregarEquipamentosEInventario();
     }
 
     private void processarComando(String comando) {
@@ -179,33 +159,35 @@ public class ClientHandler implements Runnable {
     }
 
     private void exibirFicha() {
+        PersonagemDados d = jogador.getDados();
         escritor.println("==========================================");
-        escritor.println(" FICHA DE PERSONAGEM: " + dadosPersonagem.nome);
-        escritor.println(" Nível: " + dadosPersonagem.nivel + " | XP: " + dadosPersonagem.xp + "/" + dadosPersonagem.getXpNecessario());
+        escritor.println(" FICHA DE PERSONAGEM: " + d.nome);
+        escritor.println(" Nível: " + d.nivel + " | XP: " + d.xp + "/" + d.getXpNecessario());
         escritor.println("------------------------------------------");
-        escritor.println(" Vida: " + dadosPersonagem.vidaAtual + "/" + dadosPersonagem.getVidaMax());
-        escritor.println(" Mana: " + dadosPersonagem.manaAtual + "/" + dadosPersonagem.getManaMax());
+        escritor.println(" Vida: " + d.vidaAtual + "/" + d.getVidaMax());
+        escritor.println(" Mana: " + d.manaAtual + "/" + d.getManaMax());
         escritor.println("------------------------------------------");
         escritor.println(" ATRIBUTOS:");
-        escritor.println("  [FOR] Força:      " + dadosPersonagem.forca + " (Dano Melee: " + getAtaqueMeleeTotal() + ")");
-        escritor.println("  [VIT] Vitalidade: " + dadosPersonagem.vitalidade + " (Defesa Base: " + dadosPersonagem.getDefesaBase() + ")");
-        escritor.println("  [ENE] Energia:    " + dadosPersonagem.energia + " (Dano Mágico: " + getDanoMagicoTotal() + ")");
-        escritor.println("  [PNT] Pontaria:   " + dadosPersonagem.pontaria + " (Dano Distância: " + getAtaqueRangedTotal() + ")");
+        escritor.println("  [FOR] Força:      " + d.forca + " (Dano Melee: " + jogador.getAtaqueMeleeTotal() + ")");
+        escritor.println("  [VIT] Vitalidade: " + d.vitalidade + " (Defesa Base: " + d.getDefesaBase() + ")");
+        escritor.println("  [ENE] Energia:    " + d.energia + " (Dano Mágico: " + jogador.getDanoMagicoTotal() + ")");
+        escritor.println("  [PNT] Pontaria:   " + d.pontaria + " (Dano Distância: " + jogador.getAtaqueRangedTotal() + ")");
         escritor.println("------------------------------------------");
         escritor.println(" EQUIPAMENTOS:");
-        escritor.println("  Arma:     " + (armaEquipada != null ? armaEquipada.getNome() : "Nenhuma"));
-        escritor.println("  Armadura: " + (armaduraEquipada != null ? armaduraEquipada.getNome() : "Nenhuma"));
-        escritor.println("  Defesa Total: " + getDefesaTotal());
+        escritor.println("  Arma:     " + (jogador.getArmaEquipada() != null ? jogador.getArmaEquipada().getNome() : "Nenhuma"));
+        escritor.println("  Armadura: " + (jogador.getArmaduraEquipada() != null ? jogador.getArmaduraEquipada().getNome() : "Nenhuma"));
+        escritor.println("  Defesa Total: " + jogador.getDefesaTotal());
         escritor.println("==========================================");
     }
 
     private void exibirInventario() {
         escritor.println("=== Seus Itens ===");
-        synchronized (inventario) {
-            if (inventario.isEmpty()) {
+        List<Item> inv = jogador.getInventario();
+        synchronized (inv) {
+            if (inv.isEmpty()) {
                 escritor.println("Seu inventário está vazio.");
             } else {
-                for (Item item : inventario) {
+                for (Item item : inv) {
                     escritor.println("- " + item.getNome() + " (" + item.getTipo() + ")");
                 }
             }
@@ -213,64 +195,20 @@ public class ClientHandler implements Runnable {
     }
 
     private void usarPocao(String nomeItem) {
-        Item pocao = buscarItemInventario(nomeItem);
-        if (pocao == null) {
-            escritor.println("Você não possui o item '" + nomeItem + "'.");
-            return;
-        }
-
-        if (pocao.getTipo().equalsIgnoreCase("pocao")) {
-            if (dadosPersonagem.vidaAtual >= dadosPersonagem.getVidaMax()) {
-                escritor.println("Sua vida já está cheia!");
-                return;
-            }
-
-            int cura = 30;
-            dadosPersonagem.vidaAtual = Math.min(dadosPersonagem.getVidaMax(), dadosPersonagem.vidaAtual + cura);
-            inventario.remove(pocao);
-            escritor.println("Você usou a " + pocao.getNome() + " e recuperou vida!");
-            escritor.println("Vida atual: [" + dadosPersonagem.vidaAtual + "/" + dadosPersonagem.getVidaMax() + "]");
-            salvarProgresso();
-        } else {
-            escritor.println("O item '" + nomeItem + "' não pode ser consumido.");
-        }
+        String resultado = jogador.usarPocao(nomeItem);
+        escritor.println(resultado);
+        salvarProgresso();
     }
 
     private void equiparItem(String nomeItem) {
-        Item item = buscarItemInventario(nomeItem);
-        if (item == null) {
-            escritor.println("Você não possui o item '" + nomeItem + "' no inventário.");
-            return;
-        }
-
-        if (item.getTipo().equalsIgnoreCase("arma") || item.getTipo().equalsIgnoreCase("arco")) {
-            if (armaEquipada != null) inventario.add(armaEquipada);
-            armaEquipada = item;
-            inventario.remove(item);
-            escritor.println("Você equipou " + item.getNome() + "!");
-        } else if (item.getTipo().equalsIgnoreCase("armadura")) {
-            if (armaduraEquipada != null) inventario.add(armaduraEquipada);
-            armaduraEquipada = item;
-            inventario.remove(item);
-            escritor.println("Você equipou " + item.getNome() + "!");
-        } else {
-            escritor.println("Esse item não é um equipamento.");
-        }
+        String resultado = jogador.equiparItem(nomeItem);
+        escritor.println(resultado);
         salvarProgresso();
     }
 
     private void desequiparItem(String slot) {
-        if (slot.equalsIgnoreCase("arma") && armaEquipada != null) {
-            inventario.add(armaEquipada);
-            escritor.println("Você desequipou " + armaEquipada.getNome() + ".");
-            armaEquipada = null;
-        } else if (slot.equalsIgnoreCase("armadura") && armaduraEquipada != null) {
-            inventario.add(armaduraEquipada);
-            escritor.println("Você desequipou " + armaduraEquipada.getNome() + ".");
-            armaduraEquipada = null;
-        } else {
-            escritor.println("Nada para desequipar nesse slot.");
-        }
+        String resultado = jogador.desequiparItem(slot);
+        escritor.println(resultado);
         salvarProgresso();
     }
 
@@ -281,28 +219,29 @@ public class ClientHandler implements Runnable {
             return;
         }
 
-        int danoCausado = (armaEquipada != null && armaEquipada.getTipo().equalsIgnoreCase("arco")) ?
-                getAtaqueRangedTotal() : getAtaqueMeleeTotal();
+        PersonagemDados d = jogador.getDados();
+        int danoCausado = jogador.getAtaqueTotal();
 
         alvo.receberDano(danoCausado);
         escritor.println("\n Você atacou " + alvo.getNome() + " causando " + danoCausado + " de dano!");
 
         if (alvo.estaVivo()) {
-            int danoSofrido = Math.max(1, alvo.getAtaque() - getDefesaTotal());
-            dadosPersonagem.vidaAtual = Math.max(0, dadosPersonagem.vidaAtual - danoSofrido);
+            int danoSofrido = Math.max(1, alvo.getAtaque() - jogador.getDefesaTotal());
+            d.vidaAtual = Math.max(0, d.vidaAtual - danoSofrido);
             escritor.println(alvo.getNome() + " te atacou causando " + danoSofrido + " de dano!");
             escritor.println(alvo.getNome() + " [HP: " + alvo.getVidaAtual() + "/" + alvo.getVidaMax() + "]");
-            escritor.println(dadosPersonagem.nome + " [HP: " + dadosPersonagem.vidaAtual + "/" + dadosPersonagem.getVidaMax() + "]");
+            escritor.println(d.nome + " [HP: " + d.vidaAtual + "/" + d.getVidaMax() + "]");
 
-            if (dadosPersonagem.vidaAtual == 0) {
+            if (d.vidaAtual == 0) {
                 escritor.println("\n*** VOÇÊ MORREU! ***");
                 escritor.println("Ressuscitando no Templo...");
-                dadosPersonagem.vidaAtual = dadosPersonagem.getVidaMax();
+                d.vidaAtual = d.getVidaMax();
                 this.salaAtual = ServidorMUD.mapa.get(1);
             }
         } else {
             escritor.println("Você derrotou " + alvo.getNome() + "!");
-            ganharXp(alvo.getXpConcedido());
+            String msgXp = jogador.ganharXp(alvo.getXpConcedido());
+            escritor.println(msgXp);
 
             List<Item> drops = alvo.gerarLoot();
             if (!drops.isEmpty()) {
@@ -318,68 +257,10 @@ public class ClientHandler implements Runnable {
         salvarProgresso();
     }
 
-    public void ganharXp(int quantidade) {
-        dadosPersonagem.xp += quantidade;
-        escritor.println("Você ganhou " + quantidade + " de XP!");
-
-        while (dadosPersonagem.xp >= dadosPersonagem.getXpNecessario()) {
-            dadosPersonagem.xp -= dadosPersonagem.getXpNecessario();
-            dadosPersonagem.nivel++;
-            dadosPersonagem.forca += 2;
-            dadosPersonagem.vitalidade += 2;
-            dadosPersonagem.energia += 2;
-            dadosPersonagem.pontaria += 2;
-            dadosPersonagem.vidaAtual = dadosPersonagem.getVidaMax();
-            dadosPersonagem.manaAtual = dadosPersonagem.getManaMax();
-
-            escritor.println("\n PARABÉNS! Você subiu para o Nível " + dadosPersonagem.nivel + "!");
-            escritor.println(" Todos os seus atributos aumentaram (+2)!\n");
-            escritor.println(" Vida e Mana restaurados!\n");
-        }
-    }
-
     public void salvarProgresso() {
-        if (dadosPersonagem != null) {
-            dadosPersonagem.salaId = salaAtual.getId();
-            dadosPersonagem.armaEquipada = (armaEquipada != null) ? armaEquipada.getNome() : null;
-            dadosPersonagem.armaduraEquipada = (armaduraEquipada != null) ? armaduraEquipada.getNome() : null;
-
-            GerenciadorBD.salvarPersonagem(dadosPersonagem);
-            GerenciadorBD.salvarInventario(dadosPersonagem.nome, inventario);
+        if (jogador != null) {
+            jogador.salvarProgresso(salaAtual.getId());
         }
-    }
-
-    private Item buscarItemInventario(String nome) {
-        synchronized (inventario) {
-            for (Item item : inventario) {
-                if (item.getNome().equalsIgnoreCase(nome)) return item;
-            }
-        }
-        return null;
-    }
-
-    public int getAtaqueMeleeTotal() {
-        int ataque = dadosPersonagem.forca * 2;
-        if (armaEquipada != null && armaEquipada.getTipo().equalsIgnoreCase("arma")) {
-            ataque += armaEquipada.getDano();
-        }
-        return ataque;
-    }
-
-    public int getAtaqueRangedTotal() {
-        int ataque = dadosPersonagem.pontaria * 2;
-        if (armaEquipada != null && armaEquipada.getTipo().equalsIgnoreCase("arco")) {
-            ataque += armaEquipada.getDano();
-        }
-        return ataque;
-    }
-
-    public int getDanoMagicoTotal() { return dadosPersonagem.energia * 3; }
-    
-    public int getDefesaTotal() {
-        int defesa = dadosPersonagem.getDefesaBase();
-        if (armaduraEquipada != null) defesa += armaduraEquipada.getDefesa();
-        return defesa;
     }
 
     private boolean isDirecaoValida(String cmd) {
@@ -432,7 +313,7 @@ public class ClientHandler implements Runnable {
 
         // Move da sala para o inventário
         salaAtual.removerItem(item);
-        inventario.add(item);
+        jogador.adicionarAoInventario(item);
 
         escritor.println("Você pegou: " + item.getNome());
         salvarProgresso();
@@ -444,15 +325,14 @@ public class ClientHandler implements Runnable {
             return;
         }
 
-        Item item = buscarItemInventario(nomeItem);
-
+        Item item = jogador.buscarItemInventario(nomeItem);
         if (item == null) {
             escritor.println("Você não tem '" + nomeItem + "' no seu inventário.");
             return;
         }
 
         // Move do inventário para a sala
-        inventario.remove(item);
+        jogador.removerDoInventario(item);
         salaAtual.adicionarItem(item);
 
         escritor.println("Você soltou " + item.getNome() + " no chão.");
