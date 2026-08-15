@@ -12,6 +12,7 @@ public class ServidorMUD {
         // Inicializa Banco de Dados e Mapa
         GerenciadorBD.inicializarBanco();
         carregarMapa();
+        GerenciadorCombate.iniciar();
 
         System.out.println("Servidor MUD iniciado na porta " + PORTA + "...");
 

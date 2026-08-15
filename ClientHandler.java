@@ -51,7 +51,7 @@ public class ClientHandler implements Runnable {
 
     private boolean realizarAutenticacao() throws IOException {
         escritor.println("==========================================");
-        escritor.println("                 MUD v0.0.13              ");
+        escritor.println("                 MUD v0.0.14              ");
         escritor.println("==========================================");
         escritor.print("Digite seu nome: ");
         escritor.flush();
@@ -100,7 +100,9 @@ public class ClientHandler implements Runnable {
         } else if (comandoLower.startsWith("desequipar ")) {
             desequiparItem(comandoLower.substring(11).trim());
         } else if (comandoLower.startsWith("atacar ")) {
-            atacarMonstro(comandoLower.substring(7).trim());
+            iniciarCombateCom(comandoLower.substring(7).trim());
+        } else if (comandoLower.equals("fugir")) {
+            processarFuga();
         } else if (comandoLower.startsWith("ir ")) {
             mover(comandoLower.substring(3).trim());
         } else if (isDirecaoValida(comandoLower)) {
@@ -212,49 +214,81 @@ public class ClientHandler implements Runnable {
         salvarProgresso();
     }
 
-    private void atacarMonstro(String nomeAlvo) {
+    private void iniciarCombateCom(String nomeAlvo) {
         Monstro alvo = salaAtual.buscarMonstro(nomeAlvo);
         if (alvo == null || !alvo.estaVivo()) {
-            escritor.println("\n Não há nenhum inimigo vivo com esse nome.");
+            escritor.println("Não há nenhum inimigo vivo com esse nome aqui.");
+            return;
+        }
+
+        jogador.setAlvoAtual(alvo);
+        GerenciadorCombate.registrarCombate(this);
+        escritor.println("\n[COMBATE INICIADO] Você está atacando " + alvo.getNome() + "!");
+    }
+
+    // Este método é chamado automaticamente a cada 2.5s pelo GerenciadorCombate
+    public void processarTickAtaqueAuto() {
+        Monstro alvo = jogador.getAlvoAtual();
+
+        // Validações de encerramento de combate
+        if (alvo == null || !alvo.estaVivo() || !jogador.estaEmCombate() || !salaAtual.getMonstros().contains(alvo)) {
+            jogador.encerrarCombate();
+            GerenciadorCombate.removerCombate(this);
+            escritor.println("\n[COMBATE ENCERRADO]");
             return;
         }
 
         PersonagemDados d = jogador.getDados();
+
+        // 1. Jogador ataca Monstro
         int danoCausado = jogador.getAtaqueTotal();
-
         alvo.receberDano(danoCausado);
-        escritor.println("\n Você atacou " + alvo.getNome() + " causando " + danoCausado + " de dano!");
+        escritor.println("\n⚔️ Você atacou " + alvo.getNome() + " causando " + danoCausado + " de dano!");
 
-        if (alvo.estaVivo()) {
-            int danoSofrido = Math.max(1, alvo.getAtaque() - jogador.getDefesaTotal());
-            d.vidaAtual = Math.max(0, d.vidaAtual - danoSofrido);
-            escritor.println(alvo.getNome() + " te atacou causando " + danoSofrido + " de dano!");
-            escritor.println(alvo.getNome() + " [HP: " + alvo.getVidaAtual() + "/" + alvo.getVidaMax() + "]");
-            escritor.println(d.nome + " [HP: " + d.vidaAtual + "/" + d.getVidaMax() + "]");
-
-            if (d.vidaAtual == 0) {
-                escritor.println("\n*** VOÇÊ MORREU! ***");
-                escritor.println("Ressuscitando no Templo...");
-                d.vidaAtual = d.getVidaMax();
-                this.salaAtual = ServidorMUD.mapa.get(1);
+        // 2. Verifica se o monstro morreu
+        if (!alvo.estaVivo()) {
+            escritor.println("💀 Você derrotou " + alvo.getNome() + "!");
+            escritor.println(jogador.ganharXp(alvo.getXpConcedido()));
+            
+            for (Item item : alvo.gerarLoot()) {
+                salaAtual.adicionarItem(item);
             }
-        } else {
-            escritor.println("Você derrotou " + alvo.getNome() + "!");
-            String msgXp = jogador.ganharXp(alvo.getXpConcedido());
-            escritor.println(msgXp);
-
-            List<Item> drops = alvo.gerarLoot();
-            if (!drops.isEmpty()) {
-                escritor.println("\nO monstro deixou cair no chão:");
-                for (Item item : drops) {
-                    salaAtual.adicionarItem(item);
-                    escritor.println("  - " + item.getNome());
-                }
-            }
-
+            
             salaAtual.agendarRespawn(alvo, 15);
+            jogador.encerrarCombate();
+            GerenciadorCombate.removerCombate(this);
+            salvarProgresso();
+            return;
         }
+
+        // 3. Monstro contra-ataca
+        int danoSofrido = Math.max(1, alvo.getAtaque() - jogador.getDefesaTotal());
+        d.vidaAtual = Math.max(0, d.vidaAtual - danoSofrido);
+        escritor.println("💥 " + alvo.getNome() + " te atacou causando " + danoSofrido + " de dano!");
+        escritor.println("   [HP: " + d.vidaAtual + "/" + d.getVidaMax() + " | " + alvo.getNome() + " HP: " + alvo.getVidaAtual() + "/" + alvo.getVidaMax() + "]");
+
+        // 4. Morte do jogador
+        if (d.vidaAtual == 0) {
+            escritor.println("\n*** VOCÊ MORREU! ***");
+            escritor.println("Ressuscitando no Templo...");
+            d.vidaAtual = d.getVidaMax();
+            this.salaAtual = ServidorMUD.mapa.get(1);
+            jogador.encerrarCombate();
+            GerenciadorCombate.removerCombate(this);
+        }
+
         salvarProgresso();
+    }
+
+    private void processarFuga() {
+        if (!jogador.estaEmCombate()) {
+            escritor.println("Você não está em combate.");
+            return;
+        }
+
+        jogador.encerrarCombate();
+        GerenciadorCombate.removerCombate(this);
+        escritor.println("Você se desengajou do combate!");
     }
 
     public void salvarProgresso() {
@@ -282,6 +316,12 @@ public class ClientHandler implements Runnable {
     }
 
     private void mover(String direcao) {
+        if (jogador.estaEmCombate()) {
+            jogador.encerrarCombate();
+            GerenciadorCombate.removerCombate(this);
+            escritor.println("Você se desengajou do combate!");
+        }
+
         String dirNormalizada = normalizarDirecao(direcao);
         Sala proximaSala = salaAtual.getSaida(dirNormalizada);
 
