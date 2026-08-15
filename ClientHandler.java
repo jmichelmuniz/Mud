@@ -57,7 +57,7 @@ public class ClientHandler implements Runnable {
 
     private boolean realizarAutenticacao() throws IOException {
         escritor.println("==========================================");
-        escritor.println("                 MUD v0.0.11              ");
+        escritor.println("                 MUD v0.0.12              ");
         escritor.println("==========================================");
         escritor.print("Digite seu nome: ");
         escritor.flush();
@@ -129,8 +129,20 @@ public class ClientHandler implements Runnable {
             pegarItem(comandoLower.substring(6).trim());
         } else if (comandoLower.startsWith("soltar ") || comandoLower.startsWith("largar ")) {
             soltarItem(comandoLower.substring(7).trim());
+        } else if (comandoLower.equals("comandos") || comandoLower.equals("help")) {
+            escritor.println("      Comando        " + "   Como funciona");
+            escritor.println("\n   OLHAR             " + "Mostra a descrição completa da sala em que se encontra, incluindo saídas, jogadores, monstros e itens na sala.");
+            escritor.println("\n   INVENTARIO / INV  " + "Mostra todos os itens que estão no seu inventário");
+            escritor.println("\n   FICHA / STATUS    " + "Mostra a ficha do personagem, com informações como nivel, xp, atributos e equipamentos");
+            escritor.println("\n   USAR              " + "'usar <item>' utiliza o item se ele for um consumível. eg.: 'usar pocao'");
+            escritor.println("\n   EQUIPAR           " + "'equipar <arma ou armadura>' equipa o item escolhido se ele estiver no seu inventario. eg.: 'equipar espada'");
+            escritor.println("\n   DESEQUIPAR        " + "'desequipar <arma ou armadura>' desequipa o item equipado e guarda ele no inventario. eg.: 'desequipar armadura'");
+            escritor.println("\n   ATACAR            " + "'atacar <monstro>' ataca o monstro, e se ele sobreviver recebe um contra ataque do mesmo. eg.: 'atacar goblin'");
+            escritor.println("\n   IR                " + "'ir <direção>' é o comando basico de movimento entre as salas. Pode ser utilizado sem o 'ir', apenas com a direção, ou apenas a inicial da direção. eg.: 'ir norte'; 'sul'; 'l'");
+            escritor.println("\n   PEGAR             " + "'pegar <item>' pega o item que está na sala e guarda no inventario. eg.: 'pegar pocao'");
+            escritor.println("\n   SOLTAR / LARGAR   " + "'soltar <item>' solta o item do inventario do jogador para a sala atual. eg.: 'largar espada'");
         } else {
-            escritor.println("Comando não reconhecido.");
+            escritor.println("Comando não reconhecido. Para uma lista de comandos disponiveis digite 'comandos' ou 'help'.");
         }
     }
 

@@ -53,23 +53,32 @@ public class ServidorMUD {
 
     private static void carregarMapa() {
         // Cria o mapa
-        Sala vila = new Sala(1, "Centro da Vila", "Um local calmo com uma fonte no centro.");
-        Sala floresta = new Sala(2, "Floresta Sombria", "Árvores altas bloqueiam a luz do sol.");
+        Sala templomedelina1 = new Sala(1, "Templo de Medelina [Genora]", "Um grande edificio cheio de acólitos que atendem as pessoas feridas e cuidam de seus ferimentos. No fundo do salão é possivel encontrar uma estátua de Medelina, a deusa do amanhecer.");
+        Sala ruaoestegenora1 = new Sala(2, "Travessa - Oeste [Genora]", "Uma rua larga que conecta o lado oeste da cidade ao centro. Ao leste fica a praça central e ao sul fica o Templo de Medelina.");
+        Sala pracagenora = new Sala(3, "Praça Central [Genora]", "Uma grande praça com um chafariz no centro. É sempre movimentada durante o dia. À oeste fica o Templo e ao sul fica o salão de teleporte.");
+        Sala ruasulgenora1 = new Sala(4, "Travessa - Sul [Genora]", "Rua que conecta o sul da cidade ao centro. Ao norte fica a praça central, ao leste fica o salão de teleporte e ao sul fica o quartel da cidade.");
+        Sala teleportegenora = new Sala(5, "Salão de Teleporte [Genora]", "Um grande salão de pedra com um círculo de teleporte no centro. É possivel se deslocar entre outras cidades que também possuam círculo de telporte, independente da distância. A saída fica a oeste.");
 
-        mapa.put(1, vila);
-        mapa.put(2, floresta);
+        mapa.put(1, templomedelina1);
+        mapa.put(2, ruaoestegenora1);
+        mapa.put(3, pracagenora);
+        mapa.put(4, ruasulgenora1);
+        mapa.put(5, teleportegenora);
 
         // Conecta as salas
-        conectarSalas(vila, "norte", floresta);
+        conectarSalas(templomedelina1, "norte", ruaoestegenora1);
+        conectarSalas(ruaoestegenora1, "leste", pracagenora);
+        conectarSalas(pracagenora, "sul", ruasulgenora1);
+        conectarSalas(ruasulgenora1, "leste", teleportegenora);
 
         // Cria e adiciona monstros
         Monstro goblinArqueiro = new Monstro("Goblin Arqueiro", 20, 5, 10);
         Monstro goblinGuerreiro = new Monstro("Goblin Guerreiro", 35, 8, 20);
         Monstro orcChefe = new Monstro("Orc Chefe", 80, 15, 50);
 
-        floresta.adicionarMonstro(goblinArqueiro);
-        floresta.adicionarMonstro(goblinGuerreiro);
-        floresta.adicionarMonstro(orcChefe);
+        pracagenora.adicionarMonstro(goblinArqueiro);
+        pracagenora.adicionarMonstro(goblinGuerreiro);
+        pracagenora.adicionarMonstro(orcChefe);
 
         // Loot table dos monstros
         goblinArqueiro.adicionarDrop("pocao", 50);
@@ -81,7 +90,7 @@ public class ServidorMUD {
         orcChefe.adicionarDrop("armadura", 10);
 
         // Criar e adicionar item
-        vila.adicionarItem(ItemFactory.criarItem("espada"));
-        vila.adicionarItem(ItemFactory.criarItem("pocao"));
+        pracagenora.adicionarItem(ItemFactory.criarItem("espada"));
+        pracagenora.adicionarItem(ItemFactory.criarItem("pocao"));
     }
 }
