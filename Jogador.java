@@ -9,8 +9,24 @@ public class Jogador {
     private Item armaEquipada = null;
     private Item armaduraEquipada = null;
 
+    private Monstro alvoAtual = null;
+    private boolean emCombate = false;
+    private long ultimoAtaqueTempo = 0; // Para controle de Cooldown
+
     public Jogador(PersonagemDados dadosPersonagem) {
         this.dadosPersonagem = dadosPersonagem;
+    }
+
+    public Monstro getAlvoAtual() { return alvoAtual; }
+    public void setAlvoAtual(Monstro alvo) { 
+        this.alvoAtual = alvo; 
+        this.emCombate = (alvo != null);
+    }
+
+    public boolean estaEmCombate() { return emCombate; }
+    public void encerrarCombate() {
+        this.alvoAtual = null;
+        this.emCombate = false;
     }
 
     // --- CARREGAMENTO DO ESTADO ---
