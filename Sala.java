@@ -1,4 +1,5 @@
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -13,6 +14,7 @@ public class Sala {
     private final List<Monstro> monstros = new ArrayList<>();
     private final Map<String, Sala> saidas = new HashMap<>();
     private final List<Item> itens = new ArrayList<>();
+    private final List<ClientHandler> jogadoresNaSala = Collections.synchronizedList(new ArrayList<>());
     
     private MonstroModelo monstroModelo; 
     private boolean aguardandoRespawn = false;
@@ -29,6 +31,29 @@ public class Sala {
             this.vidaMax = vidaMax;
             this.ataque = ataque;
             this.xpConcedido = xpConcedido;
+        }
+    }
+
+    public void adicionarJogador(ClientHandler cliente) {
+        jogadoresNaSala.add(cliente);
+    }
+
+    public void removerJogador(ClientHandler cliente) {
+        jogadoresNaSala.remove(cliente);
+    }
+
+    public List<ClientHandler> getJogadores() {
+        return jogadoresNaSala;
+    }
+
+    // Envia uma mensagem para todos os jogadores na sala, EXCETO o remetente
+    public void notificarOutros(ClientHandler remetente, String mensagem) {
+        synchronized (jogadoresNaSala) {
+            for (ClientHandler cliente : jogadoresNaSala) {
+                if (cliente != remetente) {
+                    cliente.enviarMensagem(mensagem);
+                }
+            }
         }
     }
 

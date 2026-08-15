@@ -44,6 +44,10 @@ public class ClientHandler implements Runnable {
         } catch (IOException e) {
             System.out.println("[Conexão] Jogador desconectado abruptamente.");
         } finally {
+            if (salaAtual != null && jogador != null) {
+            salaAtual.notificarOutros(this, "\n[-] " + jogador.getDados().nome + " desconectou.");
+            salaAtual.removerJogador(this);
+        }
             salvarProgresso();
             fecharConexao();
         }
@@ -51,7 +55,7 @@ public class ClientHandler implements Runnable {
 
     private boolean realizarAutenticacao() throws IOException {
         escritor.println("==========================================");
-        escritor.println("                 MUD v0.0.14              ");
+        escritor.println("                 MUD v0.0.15              ");
         escritor.println("==========================================");
         escritor.print("Digite seu nome: ");
         escritor.flush();
@@ -79,9 +83,18 @@ public class ClientHandler implements Runnable {
         return true;
     }
 
+    public void enviarMensagem(String mensagem) {
+        if (escritor != null) {
+            escritor.println(mensagem);
+        }
+    }
+
     private void carregarEstadoJogador() {
         this.salaAtual = ServidorMUD.mapa.getOrDefault(jogador.getDados().salaId, ServidorMUD.mapa.get(1));
         jogador.carregarEquipamentosEInventario();
+
+        salaAtual.adicionarJogador(this);
+        salaAtual.notificarOutros(this, "\n[+] " + jogador.getDados().nome + " entrou no mundo.");
     }
 
     private void processarComando(String comando) {
@@ -118,7 +131,7 @@ public class ClientHandler implements Runnable {
             escritor.println("\n   FICHA / STATUS    " + "Mostra a ficha do personagem, com informações como nivel, xp, atributos e equipamentos");
             escritor.println("\n   USAR              " + "'usar <item>' utiliza o item se ele for um consumível. eg.: 'usar pocao'");
             escritor.println("\n   EQUIPAR           " + "'equipar <arma ou armadura>' equipa o item escolhido se ele estiver no seu inventario. eg.: 'equipar espada'");
-            escritor.println("\n   DESEQUIPAR        " + "'desequipar <arma ou armadura>' desequipa o item equipado e guarda ele no inventario. eg.: 'desequipar armadura'");
+            escritor.println("\n   DESEQUIPAR        " + "'desequipar <slot>' desequipa o item equipado e guarda ele no inventario. eg.: 'desequipar armadura'; 'desequipar arma'");
             escritor.println("\n   ATACAR            " + "'atacar <monstro>' ataca o monstro, e se ele sobreviver recebe um contra ataque do mesmo. eg.: 'atacar goblin'");
             escritor.println("\n   IR                " + "'ir <direção>' é o comando basico de movimento entre as salas. Pode ser utilizado sem o 'ir', apenas com a direção, ou apenas a inicial da direção. eg.: 'ir norte'; 'sul'; 'l'");
             escritor.println("\n   PEGAR             " + "'pegar <item>' pega o item que está na sala e guarda no inventario. eg.: 'pegar pocao'");
@@ -132,12 +145,29 @@ public class ClientHandler implements Runnable {
         escritor.println("\n[" + salaAtual.getNome() + "]");
         escritor.println(salaAtual.getDescricao());
 
+        // Saidas
         if (!salaAtual.getSaidas().isEmpty()) {
             escritor.println("Saídas visíveis: " + String.join(", ", salaAtual.getSaidas().keySet()));
         } else {
             escritor.println("Não há saídas visíveis aqui.");
         }
 
+        // --- OUTROS JOGADORES NA SALA ---
+        List<ClientHandler> outrosJogadores = salaAtual.getJogadores();
+        synchronized (outrosJogadores) {
+            boolean temOutro = false;
+            for (ClientHandler outro : outrosJogadores) {
+                if (outro != this) {
+                    if (!temOutro) {
+                        escritor.println("\nOutros aventureiros presentes:");
+                        temOutro = true;
+                    }
+                    escritor.println("- " + outro.getJogador().getDados().nome);
+                }
+            }
+        }
+
+        // Monstros
         List<Monstro> monstrosNaSala = salaAtual.getMonstros();
         boolean temInimigoVivo = false;
 
@@ -330,6 +360,17 @@ public class ClientHandler implements Runnable {
             return;
         }
 
+        // Avisa a sala antiga que o jogador saiu
+        salaAtual.notificarOutros(this, "\n" + jogador.getDados().nome + " foi para o " + dirNormalizada + ".");
+        salaAtual.removerJogador(this);
+
+        // Entra na nova sala
+        this.salaAtual = proximaSala;
+        salaAtual.adicionarJogador(this);
+        
+        // Avisa a nova sala que o jogador chegou
+        salaAtual.notificarOutros(this, "\n" + jogador.getDados().nome + " chegou na sala.");
+
         // Atualiza a posição do jogador
         this.salaAtual = proximaSala;
         escritor.println("Você foi para o " + dirNormalizada + ".\n");
@@ -377,6 +418,10 @@ public class ClientHandler implements Runnable {
 
         escritor.println("Você soltou " + item.getNome() + " no chão.");
         salvarProgresso();
+    }
+
+    public Jogador getJogador() {
+        return jogador;
     }
 
     private void fecharConexao() {
